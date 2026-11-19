@@ -1,0 +1,180 @@
+:root {
+   /* Exact Colors */
+   --icy-blue: #AED5F5;
+   --azure-blue: #367ADF;
+   --fresh-sky: #4FACE5;
+   --french-blue: #394988;
+   --charcoal-blue: #353A4C;
+
+
+/* Role of the Colors */
+   --primary-accent: var(--azure-blue);
+   --secondary-accent: var(--fresh-sky);
+   --sidebar-bg: var(--charcoal-blue);
+   --sidebar-card-bg: rgba(57, 73, 136, 0.35);
+   --app-bg: #f4f7fb;
+   --card-bg: #ffffff;
+   --text-main: var(--charcoal-blue);
+   --text-muted: #64748b;
+   --border-color: #e2e8f0;
+}
+
+body {
+   font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+   background-color: var(--app-bg);
+   color: var(--text-main);
+   transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* Functional Accent Helpers (For section headers, badges & profile avatar) */
+.text-accent {
+   color: var(--primary-accent) !important;
+}
+
+.bg-accent {
+   background-color: var(--primary-accent) !important;
+}
+
+/* Interactive KPI & Territory Cards */
+.kpi-card,
+.territory-tile {
+   cursor: pointer;
+   transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.25s ease;
+}
+
+.kpi-card:hover,
+.territory-tile:hover {
+   transform: translateY(-3px);
+   box-shadow: 0 8px 20px rgba(53, 58, 76, 0.12) !important;
+}
+
+/* Sidebar Navigation Links */
+.nav-pills .nav-link.active {
+   background-color: var(--primary-accent) !important;
+   font-weight: 600;
+}
+
+.nav-pills .nav-link:hover:not(.active) {
+   background-color: rgba(174, 213, 245, 0.12);
+}
+
+/* =========================================
+   Dark Mode Theme Overrides
+   ========================================= */
+body.dark-mode,
+body.dark-mode.bg-light,
+html.dark-mode body {
+   background-color: #1a1e29 !important;
+   color: #f1f5f9 !important;
+}
+
+body.dark-mode h1,
+body.dark-mode h2,
+body.dark-mode h3,
+body.dark-mode h4,
+body.dark-mode h5,
+body.dark-mode h6,
+body.dark-mode label,
+body.dark-mode .fw-bold,
+body.dark-mode .fw-semibold {
+   color: #f8fafc !important;
+}
+
+body.dark-mode .card,
+body.dark-mode .modal-content {
+   background-color: #252a38 !important;
+   color: #f1f5f9 !important;
+   border-color: var(--charcoal-blue) !important;
+}
+
+body.dark-mode .modal-header,
+body.dark-mode .border-bottom {
+   border-color: var(--charcoal-blue) !important;
+}
+
+body.dark-mode .btn-close {
+   filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+/* Grouped List Rows (Profile & Settings Pages) */
+body.dark-mode .list-group-item {
+   background-color: #252a38 !important;
+   color: #f1f5f9 !important;
+   border-color: var(--charcoal-blue) !important;
+}
+
+/* Data Tables in Dark Mode */
+body.dark-mode .table,
+body.dark-mode .table > :not(caption) > * > * {
+   color: #f1f5f9 !important;
+   background-color: transparent !important;
+   border-color: var(--charcoal-blue) !important;
+}
+
+body.dark-mode .table-hover > tbody > tr:hover > * {
+   background-color: rgba(174, 213, 245, 0.08) !important;
+   color: #ffffff !important;
+}
+
+body.dark-mode .table-light,
+body.dark-mode .table-light > tr > th,
+body.dark-mode thead.table-light th {
+   background-color: var(--charcoal-blue) !important;
+   color: #f8fafc !important;
+   border-color: #475569 !important;
+}
+
+/* Form Dropdowns & Search Inputs in Dark Mode */
+body.dark-mode .form-select,
+body.dark-mode .form-control {
+   background-color: #1a1e29 !important;
+   border-color: #475569 !important;
+   color: #f8fafc !important;
+}
+
+body.dark-mode .form-control::placeholder {
+   color: #94a3b8 !important;
+}
+
+body.dark-mode .text-muted,
+body.dark-mode small.text-muted {
+   color: var(--icy-blue) !important;
+}
+
+/* Insight & Recommendation Alerts in Dark Mode */
+body.dark-mode .alert-info {
+   background-color: rgba(79, 172, 229, 0.16) !important;
+   color: var(--icy-blue) !important;
+}
+
+body.dark-mode .alert-warning {
+   background-color: rgba(245, 158, 11, 0.15) !important;
+   color: #fde68a !important;
+}
+
+body.dark-mode .alert-success {
+   background-color: rgba(54, 122, 223, 0.2) !important;
+   color: var(--icy-blue) !important;
+}
+
+/* Full Wide-Screen Container Mode */
+body.widescreen-mode .container,
+body.widescreen-mode .container-fluid {
+   max-width: 100% !important;
+}
+
+/* Print Layout for Audit Logs */
+@media print {
+   .noprint {
+         display: none !important;
+   }
+   body {
+         background: #ffffff !important;
+         color: #000000 !important;
+         padding: 0 !important;
+   }
+   .card {
+         box-shadow: none !important;
+         border: 1px solid #dee2e6 !important;
+   }
+}

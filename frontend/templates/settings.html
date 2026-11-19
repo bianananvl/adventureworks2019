@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings | AdventureWorks BI</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body class="p-4 bg-light">
+    <div class="container py-3" style="max-width: 780px;">
+
+        <!-- Header -->
+        <div class="mb-4 px-1">
+            <h2 class="fw-bold mb-1">Dashboard Settings</h2>
+            <p class="text-muted mb-0">Customize default visualizations, color palettes, currency, and workspace layout.</p>
+        </div>
+
+        <!-- Group 1: Visualization Preferences -->
+        <h6 class="fw-bold text-teal mb-2 px-1">Visualization & Data Display</h6>
+        <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
+            <div class="list-group list-group-flush">
+                <!-- Default Graph Type -->
+                <div class="list-group-item d-flex justify-content-between align-items-center py-3 px-4">
+                    <div>
+                        <div class="fw-bold small">Default Chart Type</div>
+                        <div class="text-muted small">Preferred graph style when loading analytics modules</div>
+                    </div>
+                    <select class="form-select form-select-sm w-auto" id="set-chart-type">
+                        <option value="bar">Bar Chart</option>
+                        <option value="line">Line Graph</option>
+                        <option value="doughnut">Doughnut Chart</option>
+                        <option value="pie">Pie Chart</option>
+                    </select>
+                </div>
+
+                <!-- Chart Color Palette -->
+                <div class="list-group-item d-flex justify-content-between align-items-center py-3 px-4">
+                    <div>
+                        <div class="fw-bold small">Visualization Color Palette</div>
+                        <div class="text-muted small">Color scheme applied across all Chart.js graphs</div>
+                    </div>
+                    <select class="form-select form-select-sm w-auto" id="set-palette">
+                        <option value="Ocean">Ocean (Teal & Blue)</option>
+                        <option value="Sunset">Sunset (Coral & Amber)</option>
+                        <option value="Forest">Forest (Emerald & Sage)</option>
+                        <option value="Mono">Monochrome Slate</option>
+                    </select>
+                </div>
+
+                <!-- Default Currency -->
+                <div class="list-group-item d-flex justify-content-between align-items-center py-3 px-4">
+                    <div>
+                        <div class="fw-bold small">Default Currency</div>
+                        <div class="text-muted small">Automatic monetary conversion across KPIs and tables</div>
+                    </div>
+                    <select class="form-select form-select-sm w-auto" id="set-currency">
+                        <option value="USD">USD ($)</option>
+                        <option value="PHP">PHP (₱)</option>
+                        <option value="EUR">EUR (€)</option>
+                        <option value="JPY">JPY (¥)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Group 2: Appearance & Workspace -->
+        <h6 class="fw-bold text-teal mb-2 px-1">Appearance & Layout</h6>
+        <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+            <div class="list-group list-group-flush">
+                <!-- Interface Theme -->
+                <div class="list-group-item d-flex justify-content-between align-items-center py-3 px-4">
+                    <div>
+                        <div class="fw-bold small">Interface Theme</div>
+                        <div class="text-muted small">Switch between light and dark dashboard surfaces</div>
+                    </div>
+                    <select class="form-select form-select-sm w-auto" id="set-theme">
+                        <option value="light">Light Mode</option>
+                        <option value="dark">Dark Mode</option>
+                    </select>
+                </div>
+
+                <!-- Wide Screen Toggle -->
+                <div class="list-group-item d-flex justify-content-between align-items-center py-3 px-4">
+                    <div>
+                        <div class="fw-bold small">Full Wide-Screen Layout</div>
+                        <div class="text-muted small">Expand dashboard containers across ultra-wide monitors</div>
+                    </div>
+                    <div class="form-check form-switch m-0">
+                        <input class="form-check-input" type="checkbox" id="set-widescreen" style="transform: scale(1.2);">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/dashboard.js"></script>
+</body>
+</html>

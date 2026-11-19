@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Revenue & Loss | AdventureWorks BI</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body class="p-4 bg-light">
+    <!-- Global Filter Bar -->
+    <div class="card p-3 mb-4 shadow-sm border-0 noprint">
+        <div class="row g-2 align-items-center">
+            <div class="col-auto"><label class="fw-bold">Year:</label></div>
+            <div class="col-auto">
+                <select class="form-select form-select-sm" id="global-year">
+                    <option value="All">All Years</option>
+                    <option value="2025">2025</option>
+                    <option value="2026">2026</option>
+                </select>
+            </div>
+            <div class="col-auto"><label class="fw-bold">Region:</label></div>
+            <div class="col-auto">
+                <select class="form-select form-select-sm" id="global-region">
+                    <option value="All">All Regions</option>
+                    <option value="NCR">NCR</option>
+                    <option value="Luzon">Luzon</option>
+                    <option value="Visayas">Visayas</option>
+                    <option value="Mindanao">Mindanao</option>
+                </select>
+            </div>
+            <div class="col-auto ms-auto"><label class="fw-bold">Currency:</label></div>
+            <div class="col-auto">
+                <select class="form-select form-select-sm" id="global-currency">
+                    <option value="USD">USD ($)</option>
+                    <option value="PHP">PHP (₱)</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="JPY">JPY (¥)</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid p-0">
+        <h2 class="fw-bold mb-1">Revenue & Loss Analysis</h2>
+        <p class="text-muted mb-4">Discount concession tracking, promotional offer analysis, and net revenue leakage.</p>
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm"><small class="text-muted">List Revenue</small><h3 class="fw-bold my-1 money-val" data-usd="31200000">$31.20M</h3><small class="text-muted">Before discounts</small></div></div>
+            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm"><small class="text-muted">Discounts Given</small><h3 class="fw-bold my-1 text-danger money-val" data-usd="4050000">$4.05M</h3><small class="text-muted">Total concessions</small></div></div>
+            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm"><small class="text-muted">Leakage Rate</small><h3 class="fw-bold my-1 text-warning">12.98%</h3><small class="text-muted">Of gross list revenue</small></div></div>
+            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm"><small class="text-muted">Net Revenue</small><h3 class="fw-bold my-1 money-val" data-usd="27150000">$27.15M</h3><small class="text-success">Realized revenue</small></div></div>
+        </div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <div class="card p-3 border-0 shadow-sm">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h5 class="fw-bold m-0">Discount Concessions by Category</h5>
+                        <select class="form-select form-select-sm w-auto chart-type-switcher" data-target="revCategoryChart">
+                            <option value="bar">Bar</option>
+                            <option value="pie">Pie</option>
+                        </select>
+                    </div>
+                    <div style="height: 240px;"><canvas id="revCategoryChart"></canvas></div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card p-3 border-0 shadow-sm">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h5 class="fw-bold m-0">Leakage by Discount Tier</h5>
+                        <select class="form-select form-select-sm w-auto chart-type-switcher" data-target="revTierChart">
+                            <option value="bar">Bar</option>
+                            <option value="doughnut">Doughnut</option>
+                        </select>
+                    </div>
+                    <div style="height: 240px;"><canvas id="revTierChart"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="alert alert-warning border-0 shadow-sm mb-4">
+            <strong>Net Revenue Leakage Summary:</strong> The <strong>Bikes</strong> category accounts for 62% of total discount leakage ($2.51M). High-tier promotional discounts (11–20%) erode margin disproportionately during Q4 clearances.
+        </div>
+
+        <div class="card p-3 border-0 shadow-sm">
+            <h5 class="fw-bold mb-3">Promotional Offer Analysis</h5>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr><th>Offer Band</th><th>Orders</th><th>List Revenue</th><th>Discount Conceded</th><th>Net Revenue</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>No Discount (0%)</td><td>412</td><td class="money-val" data-usd="14200000">$14.20M</td><td class="money-val" data-usd="0">$0</td><td class="money-val" data-usd="14200000">$14.20M</td></tr>
+                        <tr><td>Standard Promo (1–5%)</td><td>310</td><td class="money-val" data-usd="9400000">$9.40M</td><td class="money-val" data-usd="470000">$470.0K</td><td class="money-val" data-usd="8930000">$8.93M</td></tr>
+                        <tr><td>Volume Discount (6–10%)</td><td>185</td><td class="money-val" data-usd="4800000">$4.80M</td><td class="money-val" data-usd="432000">$432.0K</td><td class="money-val" data-usd="4368000">$4.37M</td></tr>
+                        <tr><td>Clearance / High Leakage (11–20%)</td><td>98</td><td class="money-val" data-usd="2800000">$2.80M</td><td class="money-val" data-usd="504000">$504.0K</td><td class="money-val" data-usd="2296000">$2.30M</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/dashboard.js"></script>
+</body>
+</html>

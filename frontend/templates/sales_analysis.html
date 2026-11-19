@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sales Analysis | AdventureWorks BI</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body class="p-4 bg-light">
+    <!-- Global Filter Bar -->
+    <div class="card p-3 mb-4 shadow-sm border-0 noprint">
+        <div class="row g-2 align-items-center">
+            <div class="col-auto"><label class="fw-bold">Year:</label></div>
+            <div class="col-auto">
+                <select class="form-select form-select-sm" id="global-year">
+                    <option value="All">All Years</option>
+                    <option value="2025">2025</option>
+                    <option value="2026">2026</option>
+                </select>
+            </div>
+            <div class="col-auto"><label class="fw-bold">Region:</label></div>
+            <div class="col-auto">
+                <select class="form-select form-select-sm" id="global-region">
+                    <option value="All">All Regions</option>
+                    <option value="NCR">NCR</option>
+                    <option value="Luzon">Luzon</option>
+                    <option value="Visayas">Visayas</option>
+                    <option value="Mindanao">Mindanao</option>
+                </select>
+            </div>
+            <div class="col-auto ms-auto"><label class="fw-bold">Currency:</label></div>
+            <div class="col-auto">
+                <select class="form-select form-select-sm" id="global-currency">
+                    <option value="USD">USD ($)</option>
+                    <option value="PHP">PHP (₱)</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="JPY">JPY (¥)</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid p-0">
+        <h2 class="fw-bold mb-1">Sales Analysis</h2>
+        <p class="text-muted mb-4">Territory performance, sales representative leaderboard, and category revenue.</p>
+
+        <!-- 2-Column Section -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <div class="card p-3 border-0 shadow-sm h-100">
+                    <h5 class="fw-bold mb-3">Territory Performance Map</h5>
+                    <div class="row g-2 text-center">
+                        <div class="col-6">
+                            <div class="p-4 bg-teal text-white rounded shadow-sm territory-tile" data-bs-toggle="modal" data-bs-target="#detailModal" onclick="showTerritoryDetail('NCR', '$12,500,000', '46.0%')">
+                                <h5 class="fw-bold mb-1">NCR</h5>
+                                <div class="money-val" data-usd="12500000">$12.50M</div>
+                                <small>46.0% Share</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-4 bg-teal text-white rounded shadow-sm territory-tile" style="opacity: 0.85;" data-bs-toggle="modal" data-bs-target="#detailModal" onclick="showTerritoryDetail('Luzon', '$8,400,000', '30.9%')">
+                                <h5 class="fw-bold mb-1">Luzon</h5>
+                                <div class="money-val" data-usd="8400000">$8.40M</div>
+                                <small>30.9% Share</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-4 bg-teal text-white rounded shadow-sm territory-tile" style="opacity: 0.7;" data-bs-toggle="modal" data-bs-target="#detailModal" onclick="showTerritoryDetail('Visayas', '$4,200,000', '15.5%')">
+                                <h5 class="fw-bold mb-1">Visayas</h5>
+                                <div class="money-val" data-usd="4200000">$4.20M</div>
+                                <small>15.5% Share</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-4 bg-teal text-white rounded shadow-sm territory-tile" style="opacity: 0.55;" data-bs-toggle="modal" data-bs-target="#detailModal" onclick="showTerritoryDetail('Mindanao', '$2,050,000', '7.6%')">
+                                <h5 class="fw-bold mb-1">Mindanao</h5>
+                                <div class="money-val" data-usd="2050000">$2.05M</div>
+                                <small>7.6% Share</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card p-3 border-0 shadow-sm h-100">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h5 class="fw-bold m-0">Revenue by Category</h5>
+                        <select class="form-select form-select-sm w-auto chart-type-switcher" data-target="salesCategoryChart">
+                            <option value="bar">Bar</option>
+                            <option value="pie">Pie</option>
+                            <option value="doughnut">Doughnut</option>
+                        </select>
+                    </div>
+                    <div style="height: 240px;"><canvas id="salesCategoryChart"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sales Rep Leaderboard -->
+        <div class="card p-3 border-0 shadow-sm">
+            <h5 class="fw-bold mb-3">Sales Representative Leaderboard</h5>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr><th>#</th><th>Representative</th><th>Total Sales</th><th>Orders</th><th>Avg Order</th><th>Margin %</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>1</td><td>A. Reyes</td><td class="money-val" data-usd="5240100">$5.24M</td><td>142</td><td class="money-val" data-usd="36902">$36,902</td><td>44.2%</td></tr>
+                        <tr><td>2</td><td>B. Santos</td><td class="money-val" data-usd="4120800">$4.12M</td><td>118</td><td class="money-val" data-usd="34922">$34,922</td><td>41.8%</td></tr>
+                        <tr><td>3</td><td>C. Cruz</td><td class="money-val" data-usd="3890500">$3.89M</td><td>109</td><td class="money-val" data-usd="35692">$35,692</td><td>43.1%</td></tr>
+                        <tr><td>4</td><td>D. Garcia</td><td class="money-val" data-usd="3150200">$3.15M</td><td>94</td><td class="money-val" data-usd="33512">$33,512</td><td>39.5%</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pop-up Modal -->
+    <div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTitle">Territory Breakdown</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="modalBody">Loading details...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/dashboard.js"></script>
+</body>
+</html>
