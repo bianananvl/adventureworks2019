@@ -2,23 +2,23 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    # Authentication & Session RBAC
-    path("auth/login/", views.api_login, name="api_login"),
-    path("auth/logout/", views.api_logout, name="api_logout"),
-
-    # Dynamic Database Metadata (Available Years & Categories)
-    path("filters/", views.api_metadata_filters, name="api_metadata_filters"),
-
-    # Centralized Dashboard & 4 Required Reporting Modules
-    path("dashboard/", views.api_dashboard_overview, name="api_dashboard_overview"),
-    path("reports/sales/", views.api_sales_report, name="api_sales_report"),
-    path("reports/customers/", views.api_customer_report, name="api_customer_report"),
-    path("reports/revenue-loss/", views.api_revenue_loss_report, name="api_revenue_loss_report"),
-    path("reports/cost/", views.api_cost_report, name="api_cost_report"),
-
-    # Application-Managed Report Configurations (RBAC Edit/Delete)
-    path("configs/", views.api_saved_reports_list, name="api_saved_reports_list"),
-    path("configs/create/", views.api_saved_report_upsert, name="api_saved_report_create"),
-    path("configs/<int:report_id>/edit/", views.api_saved_report_upsert, name="api_saved_report_edit"),
-    path("configs/<int:report_id>/delete/", views.api_saved_report_delete, name="api_saved_report_delete"),
+    path("auth/login/", views.login_view, name="login"),
+    path("auth/logout/", views.logout_view, name="logout"),
+    path("login/", views.login_view, name="login_alias"),
+    path("logout/", views.logout_view, name="logout_alias"),
+    path("filters/", views.filters_api, name="filters_api"),
+    path("dashboard/", views.executive_api, name="dashboard_api"),
+    path("executive/", views.executive_api, name="executive_api"),
+    path("reports/sales/", views.sales_api, name="sales_report_api"),
+    path("sales/", views.sales_api, name="sales_api"),
+    path("reports/customers/", views.customer_api, name="customer_report_api"),
+    path("customers/", views.customer_api, name="customer_api"),
+    path("reports/revenue-loss/", views.revenue_loss_api, name="revenue_loss_report_api"),
+    path("revenue-loss/", views.revenue_loss_api, name="revenue_loss_api"),
+    path("reports/cost/", views.cost_api, name="cost_report_api"),
+    path("cost/", views.cost_api, name="cost_api"),
+    path("audit/", views.audit_api, name="audit_api"),
+    path("configs/", views.configs_list_api, name="configs_list_api"),
+    path("configs/create/", views.configs_create_api, name="configs_create_api"),
+    path("configs/<int:report_id>/delete/", views.configs_delete_api, name="configs_delete_api"),
 ]

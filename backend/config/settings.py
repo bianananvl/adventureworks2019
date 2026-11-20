@@ -58,7 +58,7 @@ DATABASES = {
     "adventureworks": {
         "ENGINE": "mssql",
         "NAME": "AdventureWorks2019",
-        "HOST": "ENKO1LAI",
+        "HOST": "AshleyCareng",
         "PORT": "",
         "OPTIONS": {
             "driver": "ODBC Driver 17 for SQL Server",
@@ -79,4 +79,7 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "/static/"
+STATICFILES_DIRS = [BASE_DIR.parent / "frontend" / "assets"]
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+X_FRAME_OPTIONS = "SAMEORIGIN"
+

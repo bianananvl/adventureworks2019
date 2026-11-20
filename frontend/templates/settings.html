@@ -1,14 +1,16 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en" data-theme="auto">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Settings | AdventureWorks BI</title>
+    <title>Settings | AdventureWorks2019</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <script src="{% static 'js/rbac.js' %}"></script>
 </head>
-<body class="p-4 bg-light">
+<body class="p-4 bg-light" data-page="settings">
     <div class="container py-3" style="max-width: 780px;">
 
         <!-- Header -->
@@ -18,10 +20,9 @@
         </div>
 
         <!-- Group 1: Visualization Preferences -->
-        <h6 class="fw-bold text-teal mb-2 px-1">Visualization & Data Display</h6>
+        <h6 class="fw-bold text-teal mb-2 px-1">Visualization &amp; Data Display</h6>
         <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
             <div class="list-group list-group-flush">
-                <!-- Default Graph Type -->
                 <div class="list-group-item d-flex justify-content-between align-items-center py-3 px-4">
                     <div>
                         <div class="fw-bold small">Default Chart Type</div>
@@ -35,21 +36,20 @@
                     </select>
                 </div>
 
-                <!-- Chart Color Palette -->
                 <div class="list-group-item d-flex justify-content-between align-items-center py-3 px-4">
                     <div>
                         <div class="fw-bold small">Visualization Color Palette</div>
                         <div class="text-muted small">Color scheme applied across all Chart.js graphs</div>
                     </div>
                     <select class="form-select form-select-sm w-auto" id="set-palette">
-                        <option value="Ocean">Ocean (Teal & Blue)</option>
-                        <option value="Sunset">Sunset (Coral & Amber)</option>
-                        <option value="Forest">Forest (Emerald & Sage)</option>
+                        <option value="Azure">Azure (Default Enterprise Blue)</option>
+                        <option value="Ocean">Ocean (Teal &amp; Blue)</option>
+                        <option value="Sunset">Sunset (Coral &amp; Amber)</option>
+                        <option value="Forest">Forest (Emerald &amp; Sage)</option>
                         <option value="Mono">Monochrome Slate</option>
                     </select>
                 </div>
 
-                <!-- Default Currency -->
                 <div class="list-group-item d-flex justify-content-between align-items-center py-3 px-4">
                     <div>
                         <div class="fw-bold small">Default Currency</div>
@@ -66,10 +66,9 @@
         </div>
 
         <!-- Group 2: Appearance & Workspace -->
-        <h6 class="fw-bold text-teal mb-2 px-1">Appearance & Layout</h6>
+        <h6 class="fw-bold text-teal mb-2 px-1">Appearance &amp; Layout</h6>
         <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
             <div class="list-group list-group-flush">
-                <!-- Interface Theme -->
                 <div class="list-group-item d-flex justify-content-between align-items-center py-3 px-4">
                     <div>
                         <div class="fw-bold small">Interface Theme</div>
@@ -81,7 +80,6 @@
                     </select>
                 </div>
 
-                <!-- Wide Screen Toggle -->
                 <div class="list-group-item d-flex justify-content-between align-items-center py-3 px-4">
                     <div>
                         <div class="fw-bold small">Full Wide-Screen Layout</div>
@@ -97,6 +95,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="assets/js/dashboard.js"></script>
+    <script src="{% static 'js/dashboard.js' %}"></script>
 </body>
 </html>

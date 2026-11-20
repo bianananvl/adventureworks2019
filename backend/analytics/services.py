@@ -85,7 +85,7 @@ def get_sales_report(year=None, category_id=None):
             SELECT
                 YEAR(soh.OrderDate) AS year,
                 MONTH(soh.OrderDate) AS month,
-                CONCAT(YEAR(soh.OrderDate), '-', RIGHT('0' + CAST(MONTH(soh.OrderDate) AS VARCHAR(2)), 2)) AS period,
+                CAST(YEAR(soh.OrderDate) AS VARCHAR(4)) + '-' + RIGHT('0' + CAST(MONTH(soh.OrderDate) AS VARCHAR(2)), 2) AS period,
                 SUM(sod.LineTotal) AS sales_amount,
                 SUM(sod.OrderQty) AS units_sold
             FROM Sales.SalesOrderDetail sod
@@ -189,9 +189,25 @@ def get_sales_report(year=None, category_id=None):
 # ==============================================================================
 # MODULE 2: CUSTOMER PROFILE
 # ==============================================================================
-def get_customer_profile_report(year=None):
-    where_sql = "YEAR(soh.OrderDate) = %s" if year else "1=1"
-    params = [int(year)] if year else []
+def get_customer_profile_report(year=None, segment=None):
+    year_int = int(year) if year else None
+    seg_clean = (segment or "").strip()
+
+    base_clauses = ["1=1"]
+    base_params = []
+    if year_int:
+        base_clauses.append("YEAR(soh.OrderDate) = %s")
+        base_params.append(year_int)
+
+    vip_clauses = list(base_clauses)
+    vip_params = list(base_params)
+    if seg_clean == "Store":
+        vip_clauses.append("c.StoreID IS NOT NULL")
+    elif seg_clean == "Individual":
+        vip_clauses.append("c.StoreID IS NULL")
+
+    base_where = " AND ".join(base_clauses)
+    vip_where = " AND ".join(vip_clauses)
 
     with connections["adventureworks"].cursor() as cursor:
         # 1. Customer Segmentation (B2B Store vs B2C Individual)
@@ -208,64 +224,65 @@ def get_customer_profile_report(year=None):
                 COALESCE(AVG(soh.SubTotal), 0) AS avg_order_value
             FROM Sales.Customer c
             INNER JOIN Sales.SalesOrderHeader soh ON c.CustomerID = soh.CustomerID
-            WHERE {where_sql}
+            WHERE {base_where}
             GROUP BY CASE WHEN c.StoreID IS NOT NULL THEN 'B2B Reseller / Store' ELSE 'B2C Individual Consumer' END;
             """,
-            params,
+            base_params,
         )
         segments = _dictfetchall(cursor)
 
-        # 2. Top 15 High-Value Customers
+        # 2. Top 15 High-Value Customers (supports All, Store, or Individual)
         cursor.execute(
             f"""
             SELECT TOP 15
                 c.CustomerID,
                 c.AccountNumber,
-                COALESCE(s.Name, CONCAT(p.FirstName, ' ', p.LastName), 'Unknown Customer') AS customer_name,
+                COALESCE(
+                    s.Name,
+                    NULLIF(LTRIM(RTRIM(COALESCE(p.FirstName, '') + ' ' + COALESCE(p.LastName, ''))), ''),
+                    'Unknown Customer'
+                ) AS customer_name,
                 CASE WHEN c.StoreID IS NOT NULL THEN 'Store' ELSE 'Individual' END AS segment,
                 COUNT(soh.SalesOrderID) AS order_frequency,
                 SUM(soh.SubTotal) AS total_spend,
                 AVG(soh.SubTotal) AS avg_order_value,
-                MAX(soh.OrderDate) AS last_order_date
+                CONVERT(VARCHAR(10), MAX(soh.OrderDate), 23) AS last_order_date
             FROM Sales.Customer c
             INNER JOIN Sales.SalesOrderHeader soh ON c.CustomerID = soh.CustomerID
             LEFT JOIN Sales.Store s ON c.StoreID = s.BusinessEntityID
             LEFT JOIN Person.Person p ON c.PersonID = p.BusinessEntityID
-            WHERE {where_sql}
+            WHERE {vip_where}
             GROUP BY c.CustomerID, c.AccountNumber, s.Name, p.FirstName, p.LastName, c.StoreID
             ORDER BY total_spend DESC;
             """,
-            params,
+            vip_params,
         )
         high_value_customers = _dictfetchall(cursor)
 
-        # 3. Purchase Frequency Distribution
+        # 3. Purchase Frequency Distribution (Derived subquery for SQL Server / pyodbc safety)
         cursor.execute(
             f"""
-            WITH CustomerOrderCounts AS (
-                SELECT CustomerID, COUNT(SalesOrderID) AS order_count
-                FROM Sales.SalesOrderHeader soh
-                WHERE {where_sql}
-                GROUP BY CustomerID
-            )
             SELECT
-                CASE
-                    WHEN order_count = 1 THEN '1 Order (One-Time)'
-                    WHEN order_count BETWEEN 2 AND 4 THEN '2-4 Orders (Repeat)'
-                    WHEN order_count BETWEEN 5 AND 9 THEN '5-9 Orders (Loyal)'
-                    ELSE '10+ Orders (VIP)'
-                END AS frequency_tier,
-                COUNT(CustomerID) AS customer_count
-            FROM CustomerOrderCounts
-            GROUP BY CASE
-                WHEN order_count = 1 THEN '1 Order (One-Time)'
-                WHEN order_count BETWEEN 2 AND 4 THEN '2-4 Orders (Repeat)'
-                WHEN order_count BETWEEN 5 AND 9 THEN '5-9 Orders (Loyal)'
-                ELSE '10+ Orders (VIP)'
-            END
+                t.frequency_tier,
+                COUNT(t.CustomerID) AS customer_count
+            FROM (
+                SELECT
+                    soh.CustomerID,
+                    CASE
+                        WHEN COUNT(soh.SalesOrderID) = 1 THEN '1 Order (One-Time)'
+                        WHEN COUNT(soh.SalesOrderID) BETWEEN 2 AND 4 THEN '2-4 Orders (Repeat)'
+                        WHEN COUNT(soh.SalesOrderID) BETWEEN 5 AND 9 THEN '5-9 Orders (Loyal)'
+                        ELSE '10+ Orders (VIP)'
+                    END AS frequency_tier
+                FROM Sales.SalesOrderHeader soh
+                INNER JOIN Sales.Customer c ON soh.CustomerID = c.CustomerID
+                WHERE {vip_where}
+                GROUP BY soh.CustomerID
+            ) t
+            GROUP BY t.frequency_tier
             ORDER BY customer_count DESC;
             """,
-            params,
+            vip_params,
         )
         frequency_distribution = _dictfetchall(cursor)
 
@@ -323,7 +340,7 @@ def get_revenue_and_loss_report(year=None, category_id=None):
             SELECT
                 YEAR(soh.OrderDate) AS year,
                 MONTH(soh.OrderDate) AS month,
-                CONCAT(YEAR(soh.OrderDate), '-', RIGHT('0' + CAST(MONTH(soh.OrderDate) AS VARCHAR(2)), 2)) AS period,
+                CAST(YEAR(soh.OrderDate) AS VARCHAR(4)) + '-' + RIGHT('0' + CAST(MONTH(soh.OrderDate) AS VARCHAR(2)), 2) AS period,
                 SUM(sod.LineTotal) AS net_revenue,
                 SUM(p.StandardCost * sod.OrderQty) AS estimated_cogs,
                 SUM(sod.LineTotal - (p.StandardCost * sod.OrderQty)) AS gross_profit

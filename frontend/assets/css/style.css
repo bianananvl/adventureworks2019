@@ -6,8 +6,7 @@
    --french-blue: #394988;
    --charcoal-blue: #353A4C;
 
-
-/* Role of the Colors */
+   /* Role of the Colors */
    --primary-accent: var(--azure-blue);
    --secondary-accent: var(--fresh-sky);
    --sidebar-bg: var(--charcoal-blue);
@@ -27,11 +26,13 @@ body {
 }
 
 /* Functional Accent Helpers (For section headers, badges & profile avatar) */
-.text-accent {
+.text-accent,
+.text-teal {
    color: var(--primary-accent) !important;
 }
 
-.bg-accent {
+.bg-accent,
+.bg-teal {
    background-color: var(--primary-accent) !important;
 }
 
@@ -166,15 +167,15 @@ body.widescreen-mode .container-fluid {
 /* Print Layout for Audit Logs */
 @media print {
    .noprint {
-         display: none !important;
+      display: none !important;
    }
    body {
-         background: #ffffff !important;
-         color: #000000 !important;
-         padding: 0 !important;
+      background: #ffffff !important;
+      color: #000000 !important;
+      padding: 0 !important;
    }
    .card {
-         box-shadow: none !important;
-         border: 1px solid #dee2e6 !important;
+      box-shadow: none !important;
+      border: 1px solid #dee2e6 !important;
    }
 }

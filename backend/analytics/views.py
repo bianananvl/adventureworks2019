@@ -1,243 +1,186 @@
 import json
 from django.contrib.auth import authenticate, login, logout
-from django.db import DatabaseError
+from django.contrib.auth.models import User, Group
 from django.http import JsonResponse
-from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET, require_http_methods
-
-from .models import SavedReportConfig
-from .permissions import (
-    get_or_create_profile,
-    require_module_view,
-    require_report_action,
-)
-from .services import (
-    get_available_filters,
-    get_cost_report,
-    get_customer_profile_report,
-    get_revenue_and_loss_report,
-    get_sales_report,
-)
+from .permissions import ROLE_PERMISSIONS, get_user_role, require_permission
+from . import services
 
 
-def _resolve_scope(request):
-    """
-    Validates query filters and enforces category scope if the user's RBAC profile
-    restricts them to a specific ProductCategoryID.
-    """
-    year = request.GET.get("year")
-    category_id = request.GET.get("category_id")
-
-    if year and not year.isdigit():
-        raise ValueError("Invalid 'year' filter. Must be numeric.")
-    if category_id and not category_id.isdigit():
-        raise ValueError("Invalid 'category_id' filter. Must be numeric.")
-
-    profile = getattr(request, "rbac_profile", None)
-    if profile and profile.assigned_category_id:
-        # Enforce assigned scope regardless of what the user passes in query params
-        category_id = str(profile.assigned_category_id)
-
-    return year, category_id
+def ensure_rbac_users():
+    if User.objects.filter(username="cost_analyst").exists():
+        return
+    users = [
+        ("admin", "admin123", "ADMINISTRATOR", True),
+        ("manager", "manager123", "MANAGER", False),
+        ("supervisor", "supervisor123", "SUPERVISOR", False),
+        ("sales_analyst", "sales123", "SALES_ANALYST", False),
+        ("customer_analyst", "customer123", "CUSTOMER_ANALYST", False),
+        ("financial_analyst", "financial123", "FINANCIAL_ANALYST", False),
+        ("cost_analyst", "cost123", "COST_ANALYST", False),
+    ]
+    for uname, pwd, role_name, is_super in users:
+        grp, _ = Group.objects.get_or_create(name=role_name)
+        u, _ = User.objects.get_or_create(username=uname)
+        u.set_password(pwd)
+        u.is_staff = is_super
+        u.is_superuser = is_super
+        u.save()
+        u.groups.clear()
+        u.groups.add(grp)
 
 
 @csrf_exempt
-@require_http_methods(["POST"])
-def api_login(request):
-    try:
-        body = json.loads(request.body.decode("utf-8"))
-        username = body.get("username", "").strip()
-        password = body.get("password", "")
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return JsonResponse({"error": "Invalid JSON payload."}, status=400)
-
-    user = authenticate(request, username=username, password=password)
-    if user is None:
-        return JsonResponse({"error": "Invalid username or password."}, status=401)
-
+def login_view(request):
+    ensure_rbac_users()
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    body = json.loads(request.body.decode("utf-8"))
+    user = authenticate(
+        request,
+        username=body.get("username", "").strip(),
+        password=body.get("password", ""),
+    )
+    if not user:
+        return JsonResponse(
+            {"success": False, "error": "Invalid username or password"}, status=401
+        )
     login(request, user)
-    profile = get_or_create_profile(user)
+    role = get_user_role(user)
+    perms = ROLE_PERMISSIONS[role]
     return JsonResponse(
         {
-            "message": "Login successful.",
+            "success": True,
             "user": user.username,
-            "role": profile.role,
-            "role_display": profile.get_role_display(),
-            "permissions": {
-                "can_view_sales": profile.can_view_sales,
-                "can_view_customers": profile.can_view_customers,
-                "can_view_revenue_loss": profile.can_view_revenue_loss,
-                "can_view_cost": profile.can_view_cost,
-                "can_edit_reports": profile.can_edit_reports,
-                "can_delete_reports": profile.can_delete_reports,
-                "assigned_category_id": profile.assigned_category_id,
-            },
+            "username": user.username,
+            "role": role,
+            "role_display": perms["role_display"],
+            "permissions": perms,
         }
     )
 
 
 @csrf_exempt
-@require_http_methods(["POST"])
-def api_logout(request):
+def logout_view(request):
     logout(request)
-    return JsonResponse({"message": "Logged out successfully."})
+    return JsonResponse({"success": True})
 
 
-@require_GET
-def api_metadata_filters(request):
+def filters_api(request):
     if not request.user.is_authenticated:
-        return JsonResponse({"error": "Authentication required."}, status=401)
-    try:
-        return JsonResponse(get_available_filters())
-    except DatabaseError as exc:
-        return JsonResponse(
-            {"error": "Database connection error.", "detail": str(exc)}, status=503
-        )
+        return JsonResponse({"error": "Authentication required"}, status=401)
+    return JsonResponse(services.get_available_filters())
 
 
-@require_GET
-def api_dashboard_overview(request):
-    if not request.user.is_authenticated:
-        return JsonResponse({"error": "Authentication required."}, status=401)
-
-    profile = get_or_create_profile(request.user)
-    request.rbac_profile = profile
-
-    try:
-        year, category_id = _resolve_scope(request)
-        payload = {"role": profile.get_role_display(), "modules": {}}
-
-        if profile.can_view_sales:
-            payload["modules"]["sales"] = get_sales_report(year, category_id)["kpis"]
-        if profile.can_view_revenue_loss:
-            payload["modules"]["financials"] = get_revenue_and_loss_report(
-                year, category_id
-            )["financial_summary"]
-        if profile.can_view_cost:
-            payload["modules"]["costs"] = get_cost_report(year, category_id)[
-                "sales_side_costs"
-            ]
-        if profile.can_view_customers:
-            payload["modules"]["customers"] = get_customer_profile_report(year)[
-                "segments"
-            ]
-
-        return JsonResponse(payload)
-    except ValueError as ve:
-        return JsonResponse({"error": str(ve)}, status=400)
-    except DatabaseError as de:
-        return JsonResponse({"error": "SQL query failure.", "detail": str(de)}, status=500)
-
-
-@require_GET
-@require_module_view("can_view_sales")
-def api_sales_report(request):
-    try:
-        year, category_id = _resolve_scope(request)
-        return JsonResponse(get_sales_report(year, category_id))
-    except ValueError as ve:
-        return JsonResponse({"error": str(ve)}, status=400)
-    except DatabaseError as de:
-        return JsonResponse({"error": "SQL query failure.", "detail": str(de)}, status=500)
-
-
-@require_GET
-@require_module_view("can_view_customers")
-def api_customer_report(request):
-    try:
-        year, _ = _resolve_scope(request)
-        return JsonResponse(get_customer_profile_report(year))
-    except ValueError as ve:
-        return JsonResponse({"error": str(ve)}, status=400)
-    except DatabaseError as de:
-        return JsonResponse({"error": "SQL query failure.", "detail": str(de)}, status=500)
-
-
-@require_GET
-@require_module_view("can_view_revenue_loss")
-def api_revenue_loss_report(request):
-    try:
-        year, category_id = _resolve_scope(request)
-        return JsonResponse(get_revenue_and_loss_report(year, category_id))
-    except ValueError as ve:
-        return JsonResponse({"error": str(ve)}, status=400)
-    except DatabaseError as de:
-        return JsonResponse({"error": "SQL query failure.", "detail": str(de)}, status=500)
-
-
-@require_GET
-@require_module_view("can_view_cost")
-def api_cost_report(request):
-    try:
-        year, category_id = _resolve_scope(request)
-        return JsonResponse(get_cost_report(year, category_id))
-    except ValueError as ve:
-        return JsonResponse({"error": str(ve)}, status=400)
-    except DatabaseError as de:
-        return JsonResponse({"error": "SQL query failure.", "detail": str(de)}, status=500)
-
-
-# ==============================================================================
-# APPLICATION-MANAGED REPORT CONFIGURATIONS (VIEW / EDIT / DELETE RBAC)
-# ==============================================================================
-@require_GET
-def api_saved_reports_list(request):
-    if not request.user.is_authenticated:
-        return JsonResponse({"error": "Authentication required."}, status=401)
-
-    configs = SavedReportConfig.objects.all().order_by("-updated_at")
-    data = [
+@require_permission("can_view_executive")
+def executive_api(request):
+    year = request.GET.get("year")
+    category_id = request.GET.get("category_id")
+    cust_data = services.get_customer_profile_report(year=year)
+    return JsonResponse(
         {
-            "id": c.id,
-            "title": c.title,
-            "module": c.module,
-            "filter_params": c.filter_params,
-            "consultant_notes": c.consultant_notes,
-            "updated_at": c.updated_at.isoformat(),
+            "filters": services.get_available_filters(),
+            "modules": {
+                "customers": cust_data.get("segments", []),
+            },
+            "sales": services.get_sales_report(year=year, category_id=category_id),
+            "customers": cust_data,
+            "revenue_loss": services.get_revenue_and_loss_report(
+                year=year, category_id=category_id
+            ),
+            "cost": services.get_cost_report(year=year, category_id=category_id),
         }
-        for c in configs
-    ]
-    return JsonResponse({"saved_reports": data})
+    )
 
 
-@csrf_exempt
-@require_http_methods(["POST", "PUT"])
-@require_report_action("edit")
-def api_saved_report_upsert(request, report_id=None):
-    try:
-        body = json.loads(request.body.decode("utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return JsonResponse({"error": "Invalid JSON payload."}, status=400)
+@require_permission("can_view_sales")
+def sales_api(request):
+    year = request.GET.get("year")
+    category_id = request.GET.get("category_id")
+    return JsonResponse(
+        services.get_sales_report(year=year, category_id=category_id)
+    )
 
-    title = body.get("title", "").strip()
-    module = body.get("module", "").strip()
-    if not title or not module:
-        return JsonResponse({"error": "'title' and 'module' are required."}, status=400)
 
-    if report_id:
-        report = get_object_or_404(SavedReportConfig, id=report_id)
-        report.title = title
-        report.module = module
-        report.filter_params = body.get("filter_params", report.filter_params)
-        report.consultant_notes = body.get("consultant_notes", report.consultant_notes)
-        report.save()
-    else:
-        report = SavedReportConfig.objects.create(
-            title=title,
-            module=module,
-            filter_params=body.get("filter_params", {}),
-            consultant_notes=body.get("consultant_notes", ""),
-            created_by=request.user,
+@require_permission("can_view_customers")
+def customer_api(request):
+    year = request.GET.get("year")
+    segment = request.GET.get("segment")
+    return JsonResponse(
+        services.get_customer_profile_report(year=year, segment=segment)
+    )
+
+
+@require_permission("can_view_revenue_loss")
+def revenue_loss_api(request):
+    year = request.GET.get("year")
+    category_id = request.GET.get("category_id")
+    return JsonResponse(
+        services.get_revenue_and_loss_report(year=year, category_id=category_id)
+    )
+
+
+@require_permission("can_view_cost")
+def cost_api(request):
+    year = request.GET.get("year")
+    category_id = request.GET.get("category_id")
+    return JsonResponse(
+        services.get_cost_report(year=year, category_id=category_id)
+    )
+
+
+@require_permission("can_view_audit")
+def audit_api(request):
+    users_list = []
+    for u in User.objects.all().order_by("id"):
+        role = get_user_role(u)
+        users_list.append(
+            {
+                "id": u.id,
+                "username": u.username,
+                "role": role,
+                "role_display": ROLE_PERMISSIONS.get(role, {}).get(
+                    "role_display", role
+                ),
+                "is_active": u.is_active,
+            }
         )
+    return JsonResponse({"users": users_list, "rbac_matrix": ROLE_PERMISSIONS})
 
-    return JsonResponse({"message": "Report configuration saved.", "id": report.id})
+
+_SAVED_SNAPSHOTS = []
+_NEXT_SNAPSHOT_ID = 1
+
+
+def configs_list_api(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({"error": "Authentication required"}, status=401)
+    return JsonResponse({"saved_reports": _SAVED_SNAPSHOTS})
 
 
 @csrf_exempt
-@require_http_methods(["DELETE"])
-@require_report_action("delete")
-def api_saved_report_delete(request, report_id):
-    report = get_object_or_404(SavedReportConfig, id=report_id)
-    report.delete()
-    return JsonResponse({"message": "Report configuration deleted."})
+@require_permission("can_edit_reports")
+def configs_create_api(request):
+    global _NEXT_SNAPSHOT_ID
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    body = json.loads(request.body.decode("utf-8"))
+    item = {
+        "id": _NEXT_SNAPSHOT_ID,
+        "title": body.get("title", "Untitled Snapshot"),
+        "module": body.get("module", "Sales Report"),
+        "filter_params": body.get("filter_params", {}),
+        "consultant_notes": body.get("consultant_notes", ""),
+        "created_by": request.user.username,
+    }
+    _NEXT_SNAPSHOT_ID += 1
+    _SAVED_SNAPSHOTS.insert(0, item)
+    return JsonResponse({"success": True, "report": item})
+
+
+@csrf_exempt
+@require_permission("can_delete_reports")
+def configs_delete_api(request, report_id):
+    global _SAVED_SNAPSHOTS
+    _SAVED_SNAPSHOTS = [r for r in _SAVED_SNAPSHOTS if r["id"] != report_id]
+    return JsonResponse({"success": True})

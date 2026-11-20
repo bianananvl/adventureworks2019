@@ -1,82 +1,81 @@
-    <!DOCTYPE html>
-    <html lang="en" data-theme="auto">
-    <head>
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DATAOPT FINALS</title>
+    <title>AdventureWorks2019 BI Portal</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="assets/css/style.css">
-    </head>
-    <body>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
 
-    <!-- LOGIN OVERLAY (Shown until signed in) -->
+    <!-- LOGIN OVERLAY -->
     <div id="login-screen" class="d-flex align-items-center justify-content-center" style="min-height: 100vh; background: linear-gradient(135deg, var(--charcoal-blue) 0%, var(--french-blue) 100%);">
-        <div class="card border-0 shadow-lg p-4" style="max-width: 400px; width: 100%; border-radius: 16px;">
+        <div class="card border-0 shadow-lg p-4" style="max-width: 420px; width: 100%; border-radius: 16px;">
             <div class="text-center mb-4">
                 <h3 class="fw-bold mb-1" style="color: var(--charcoal-blue);">JBABE<span style="color: var(--azure-blue);">Works</span></h3>
-                <p class="text-muted small">Enterprise Business Intelligence Portal - DATAOPT FINALS</p>
+                <p class="text-muted small mb-0">AdventureWorks2019 Live SQL Server BI Portal</p>
             </div>
-            <div class="alert alert-danger py-2 small d-none" id="login-error">
-                Invalid credentials. Use <strong>admin</strong> / <strong>admin123</strong>.
-            </div>
+            <div class="alert alert-danger py-2 small d-none" id="login-error"></div>
             <form id="login-form">
                 <div class="mb-3">
-                    <label class="form-label small fw-bold">Username</label>
-                    <input type="text" class="form-control" id="username" value="admin" required>
+                    <label class="form-label small fw-bold">Django Username</label>
+                    <input type="text" class="form-control" id="username" placeholder="Enter your username" required>
                 </div>
                 <div class="mb-4">
                     <label class="form-label small fw-bold">Password</label>
-                    <input type="password" class="form-control" id="password" value="admin123" required>
+                    <input type="password" class="form-control" id="password" placeholder="••••••••" required>
                 </div>
-                <button type="submit" class="btn w-100 fw-bold py-2 rounded-3 text-white" style="background-color: var(--azure-blue);">Sign In</button>
+                <button type="submit" id="login-btn" class="btn w-100 fw-bold py-2 rounded-3 text-white" style="background-color: var(--azure-blue);">Sign In to AdventureWorks2019</button>
             </form>
         </div>
     </div>
 
-    <!-- MAIN APP SHELL (Unified Sidebar Navigation) -->
+    <!-- MAIN APP SHELL -->
     <div class="d-none" id="app-shell" style="min-height: 100vh;">
         <div class="d-flex w-100">
-            <!-- Unified Sidebar -->
-            <aside class="text-white p-3 d-flex flex-column" style="width: 240px; min-height: 100vh; flex-shrink: 0; background-color: var(--sidebar-bg);">
-                <h4 class="fw-bold mb-4" style="color: var(--icy-blue);">JBABE<span style="color: var(--fresh-sky);">Works</span></h4>
-                
-                <!-- All Module Links in One Place -->
+            <aside class="text-white p-3 d-flex flex-column" style="width: 245px; min-height: 100vh; flex-shrink: 0; background-color: var(--sidebar-bg);">
+                <h4 class="fw-bold mb-1" style="color: var(--icy-blue);">JBABE<span style="color: var(--fresh-sky);">Works</span></h4>
+                <div class="small mb-4" style="color: var(--icy-blue); opacity: 0.8;">SQL Server: AdventureWorks2019</div>
+
                 <ul class="nav nav-pills flex-column gap-1" id="sidebar-nav">
-                    <li class="nav-item"><a href="executive_central.html" target="content-frame" class="nav-link active text-white">Executive Central</a></li>
-                    <li class="nav-item"><a href="sales_analysis.html" target="content-frame" class="nav-link text-white">Sales Analysis</a></li>
-                    <li class="nav-item"><a href="customer_profile.html" target="content-frame" class="nav-link text-white">Customer Profile</a></li>
-                    <li class="nav-item"><a href="revenue_loss.html" target="content-frame" class="nav-link text-white">Revenue & Loss</a></li>
-                    <li class="nav-item"><a href="cost_analysis.html" target="content-frame" class="nav-link text-white">Cost Analysis</a></li>
-                    <li class="nav-item"><a href="audit_logs.html" target="content-frame" class="nav-link text-white">Audit Logs</a></li>
+                    <li class="nav-item" id="nav-exec"><a href="/executive_central.html" target="content-frame" class="nav-link active text-white">Executive Central</a></li>
+                    <li class="nav-item" id="nav-sales"><a href="/sales_analysis.html" target="content-frame" class="nav-link text-white">Sales Analysis</a></li>
+                    <li class="nav-item" id="nav-customers"><a href="/customer_profile.html" target="content-frame" class="nav-link text-white">Customer Profile</a></li>
+                    <li class="nav-item" id="nav-revloss"><a href="/revenue_loss.html" target="content-frame" class="nav-link text-white">Revenue &amp; Loss</a></li>
+                    <li class="nav-item" id="nav-cost"><a href="/cost_analysis.html" target="content-frame" class="nav-link text-white">Cost Analysis</a></li>
+                    <li class="nav-item" id="nav-audit"><a href="/audit_logs.html" target="content-frame" class="nav-link text-white">Audit Logs &amp; RBAC</a></li>
                 </ul>
 
                 <hr class="my-3" style="border-color: rgba(174, 213, 245, 0.25);">
 
                 <ul class="nav nav-pills flex-column gap-1" id="sidebar-system">
-                    <li class="nav-item"><a href="settings.html" target="content-frame" class="nav-link text-white">Settings</a></li>
-                    <li class="nav-item"><a href="profile.html" target="content-frame" class="nav-link text-white">My Profile</a></li>
+                    <li class="nav-item" id="nav-settings"><a href="/settings.html" target="content-frame" class="nav-link text-white">Settings</a></li>
+                    <li class="nav-item" id="nav-profile"><a href="/profile.html" target="content-frame" class="nav-link text-white">My Profile</a></li>
                 </ul>
 
-                <!-- Bottom Department / Access Card -->
                 <div class="mt-auto pt-4">
                     <div class="rounded-4 p-3 text-center" style="border: 1px solid rgba(174, 213, 245, 0.25); background-color: rgba(57, 73, 136, 0.35);">
-                        <div class="fw-bold text-uppercase small" style="color: var(--icy-blue);">Department</div>
-                        <div class="small mb-3" style="color: var(--fresh-sky);">Admin Access</div>
+                        <div class="fw-bold text-uppercase small" style="color: var(--icy-blue);" id="sidebar-user">User</div>
+                        <div class="small mb-3" style="color: var(--fresh-sky);" id="sidebar-role">Role</div>
                         <button type="button" id="signout-btn" class="btn btn-sm rounded-pill fw-bold px-3 w-100" style="background-color: var(--icy-blue); color: var(--charcoal-blue);">SIGN OUT</button>
                     </div>
                 </div>
             </aside>
 
-            <!-- Dynamic Module Frame (Loads whichever page you click!) -->
             <main class="flex-grow-1 bg-light">
-                <iframe name="content-frame" id="content-frame" src="executive_central.html" style="width: 100%; height: 100vh; border: none;"></iframe>
+                <iframe name="content-frame" id="content-frame" src="" style="width: 100%; height: 100vh; border: none;"></iframe>
             </main>
         </div>
     </div>
 
     <script>
-        // Highlight active sidebar link on click
+        const loginScreen = document.getElementById('login-screen');
+        const appShell = document.getElementById('app-shell');
+        const frame = document.getElementById('content-frame');
+
         document.querySelectorAll('#sidebar-nav a, #sidebar-system a').forEach(link => {
             link.addEventListener('click', function() {
                 document.querySelectorAll('#sidebar-nav a, #sidebar-system a').forEach(l => l.classList.remove('active'));
@@ -84,33 +83,103 @@
             });
         });
 
-        // Login logic (admin / admin123)
-        const loginScreen = document.getElementById('login-screen');
-        const appShell = document.getElementById('app-shell');
+        function applySessionUI(session) {
+            document.getElementById('sidebar-user').textContent = session.user || 'User';
+            document.getElementById('sidebar-role').textContent = session.role_display || 'Analyst';
 
-        if (localStorage.getItem('aw_logged_in') === 'true') {
+            const role = (session.role || '').toUpperCase();
+            const p = session.permissions || {};
+
+            // Reset visibility before applying RBAC rules (nav-profile is ALWAYS visible)
+            ['nav-exec', 'nav-sales', 'nav-customers', 'nav-revloss', 'nav-cost', 'nav-audit', 'nav-settings', 'nav-profile'].forEach(id => {
+                document.getElementById(id)?.classList.remove('d-none');
+            });
+
+            const isExecOrAdmin = (role === 'ADMINISTRATOR' || role === 'MANAGER');
+
+            if (!isExecOrAdmin) {
+                document.getElementById('nav-exec')?.classList.add('d-none');
+                document.getElementById('nav-audit')?.classList.add('d-none');
+                document.getElementById('nav-settings')?.classList.add('d-none');
+            }
+
+            if (p.can_view_sales === false) document.getElementById('nav-sales')?.classList.add('d-none');
+            if (p.can_view_customers === false) document.getElementById('nav-customers')?.classList.add('d-none');
+            if (p.can_view_revenue_loss === false) document.getElementById('nav-revloss')?.classList.add('d-none');
+            if (p.can_view_cost === false) document.getElementById('nav-cost')?.classList.add('d-none');
+
+            let defaultPage = '/executive_central.html';
+            if (!isExecOrAdmin) {
+                if (p.can_view_sales) defaultPage = '/sales_analysis.html';
+                else if (p.can_view_customers) defaultPage = '/customer_profile.html';
+                else if (p.can_view_revenue_loss) defaultPage = '/revenue_loss.html';
+                else if (p.can_view_cost) defaultPage = '/cost_analysis.html';
+                else defaultPage = '/profile.html';
+            }
+
+            document.querySelectorAll('#sidebar-nav a, #sidebar-system a').forEach(a => {
+                a.classList.toggle('active', a.getAttribute('href') === defaultPage);
+            });
+
             loginScreen.classList.add('d-none');
             appShell.classList.remove('d-none');
+            frame.src = defaultPage;
         }
 
-        document.getElementById('login-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            const u = document.getElementById('username').value.trim();
-            const p = document.getElementById('password').value.trim();
-            if (u === 'admin' && p === 'admin123') {
-                localStorage.setItem('aw_logged_in', 'true');
-                loginScreen.classList.add('d-none');
-                appShell.classList.remove('d-none');
+        fetch('/api/filters/', { credentials: 'same-origin' }).then(res => {
+            const saved = JSON.parse(localStorage.getItem('aw_session') || 'null');
+            if (res.ok && saved) {
+                applySessionUI(saved);
             } else {
-                document.getElementById('login-error').classList.remove('d-none');
+                localStorage.removeItem('aw_session');
             }
         });
 
-        document.getElementById('signout-btn').addEventListener('click', function() {
-            localStorage.removeItem('aw_logged_in');
+        document.getElementById('login-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const errBox = document.getElementById('login-error');
+            errBox.classList.add('d-none');
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+
+            try {
+                const res = await fetch('/api/auth/login/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    errBox.textContent = data.error || 'Login failed.';
+                    errBox.classList.remove('d-none');
+                    return;
+                }
+                localStorage.setItem('aw_session', JSON.stringify(data));
+                const logs = JSON.parse(localStorage.getItem('aw_audit_logs') || '[]');
+                logs.unshift({
+                    timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),
+                    user: data.user,
+                    role: data.role_display,
+                    action: 'Authenticated via Django RBAC Session',
+                    module: 'Auth Portal',
+                    status: 'SUCCESS'
+                });
+                localStorage.setItem('aw_audit_logs', JSON.stringify(logs));
+                applySessionUI(data);
+            } catch (err) {
+                errBox.textContent = 'Cannot reach Django server on port 8000.';
+                errBox.classList.remove('d-none');
+            }
+        });
+
+        document.getElementById('signout-btn').addEventListener('click', async function() {
+            await fetch('/api/auth/logout/', { method: 'POST', credentials: 'same-origin' });
+            localStorage.removeItem('aw_session');
+            frame.src = '';
             appShell.classList.add('d-none');
             loginScreen.classList.remove('d-none');
         });
     </script>
-    </body>
-    </html>
+</body>
+</html>
