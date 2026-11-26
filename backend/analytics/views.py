@@ -6,7 +6,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import Group, User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import connections, transaction
 from django.db.models import Count, Q
 from django.db.models.functions import TruncDate
 from django.http import HttpResponse, JsonResponse
@@ -265,6 +265,248 @@ def cost_api(request):
     return JsonResponse(
         services.get_cost_report(year=year, category_id=category_id)
     )
+
+
+# ==============================================================================
+# PREDICTIVE FORECASTING & TRENDS (SALES, DEMAND & CUSTOMER RETENTION)
+# ==============================================================================
+def _linear_forecast(values, horizon=6):
+    """Ordinary least squares linear trend + 3-period moving average smoothing."""
+    n = len(values)
+    if n == 0:
+        return [], []
+    if n == 1:
+        return [round(values[0], 2)] * horizon, [round(values[0], 2)]
+
+    x_mean = (n - 1) / 2.0
+    y_mean = sum(values) / n
+    num = sum((i - x_mean) * (values[i] - y_mean) for i in range(n))
+    den = sum((i - x_mean) ** 2 for i in range(n)) or 1.0
+    slope = num / den
+    intercept = y_mean - slope * x_mean
+
+    moving_avg = []
+    for i in range(n):
+        window = values[max(0, i - 2): i + 1]
+        moving_avg.append(round(sum(window) / len(window), 2))
+
+    seasonal = []
+    for step in range(horizon):
+        idx = n + step
+        base = max(0.0, intercept + slope * idx)
+        if n >= 12:
+            ref_idx = (idx - 12) % n
+            trend_at_ref = max(1.0, intercept + slope * ref_idx)
+            factor = max(0.65, min(1.45, values[ref_idx] / trend_at_ref))
+        else:
+            factor = 1.0
+        seasonal.append(round(base * factor, 2))
+
+    return seasonal, moving_avg
+
+
+def _next_month_labels(last_label, horizon=6):
+    """Generates YYYY-MM labels following the last historical period string."""
+    try:
+        parts = str(last_label).split("-")
+        y, m = int(parts[0]), int(parts[1])
+        out = []
+        for _ in range(horizon):
+            m += 1
+            if m > 12:
+                m = 1
+                y += 1
+            out.append(f"{y:04d}-{m:02d}")
+        return out
+    except (ValueError, IndexError):
+        return [f"Forecast +{i+1}" for i in range(horizon)]
+
+
+@require_permission("can_view_forecasting")
+def forecasting_api(request):
+    year = _parse_int_list(request, "year")
+    category_id = _parse_int_list(request, "category_id")
+    horizon = min(max(int(request.GET.get("horizon", 6) or 6), 3), 12)
+    cfg = SystemSettings.get_solo()
+    mult = float(cfg.currency_multiplier or 1.0)
+
+    where_clauses = ["1=1"]
+    params = []
+    if year:
+        placeholders = ",".join(["%s"] * len(year))
+        where_clauses.append(f"YEAR(soh.OrderDate) IN ({placeholders})")
+        params.extend(year)
+    if category_id:
+        placeholders = ",".join(["%s"] * len(category_id))
+        where_clauses.append(f"pc.ProductCategoryID IN ({placeholders})")
+        params.extend(category_id)
+    where_sql = " AND ".join(where_clauses)
+
+    hist_labels = []
+    hist_sales = []
+    demand_categories = []
+    demand_products = []
+    total_cust = 0
+    repeat_cust = 0
+
+    try:
+        with connections["adventureworks"].cursor() as cursor:
+            # 1. Monthly Historical Sales Trend
+            cursor.execute(
+                f"""
+                SELECT
+                    FORMAT(soh.OrderDate, 'yyyy-MM') AS ym,
+                    SUM(sod.LineTotal) AS net_revenue
+                FROM Sales.SalesOrderDetail sod
+                INNER JOIN Sales.SalesOrderHeader soh ON sod.SalesOrderID = soh.SalesOrderID
+                INNER JOIN Production.Product p ON sod.ProductID = p.ProductID
+                LEFT JOIN Production.ProductSubcategory psc ON p.ProductSubcategoryID = psc.ProductSubcategoryID
+                LEFT JOIN Production.ProductCategory pc ON psc.ProductCategoryID = pc.ProductCategoryID
+                WHERE {where_sql}
+                GROUP BY FORMAT(soh.OrderDate, 'yyyy-MM')
+                ORDER BY ym ASC
+                """,
+                params,
+            )
+            for row in cursor.fetchall():
+                hist_labels.append(str(row[0]))
+                hist_sales.append(round(float(row[1] or 0) * mult, 2))
+
+            # 2. Category Demand & Revenue
+            cursor.execute(
+                f"""
+                SELECT
+                    COALESCE(pc.Name, 'Uncategorized') AS category_name,
+                    SUM(sod.OrderQty) AS units_sold,
+                    SUM(sod.LineTotal) AS net_revenue
+                FROM Sales.SalesOrderDetail sod
+                INNER JOIN Sales.SalesOrderHeader soh ON sod.SalesOrderID = soh.SalesOrderID
+                INNER JOIN Production.Product p ON sod.ProductID = p.ProductID
+                LEFT JOIN Production.ProductSubcategory psc ON p.ProductSubcategoryID = psc.ProductSubcategoryID
+                LEFT JOIN Production.ProductCategory pc ON psc.ProductCategoryID = pc.ProductCategoryID
+                WHERE {where_sql}
+                GROUP BY COALESCE(pc.Name, 'Uncategorized')
+                ORDER BY net_revenue DESC
+                """,
+                params,
+            )
+            cat_raw = cursor.fetchall()
+
+            # 3. Top 8 Products by Unit Demand
+            cursor.execute(
+                f"""
+                SELECT TOP 8
+                    p.Name AS product_name,
+                    SUM(sod.OrderQty) AS units_sold
+                FROM Sales.SalesOrderDetail sod
+                INNER JOIN Sales.SalesOrderHeader soh ON sod.SalesOrderID = soh.SalesOrderID
+                INNER JOIN Production.Product p ON sod.ProductID = p.ProductID
+                LEFT JOIN Production.ProductSubcategory psc ON p.ProductSubcategoryID = psc.ProductSubcategoryID
+                LEFT JOIN Production.ProductCategory pc ON psc.ProductCategoryID = pc.ProductCategoryID
+                WHERE {where_sql}
+                GROUP BY p.Name
+                ORDER BY units_sold DESC
+                """,
+                params,
+            )
+            prod_raw = cursor.fetchall()
+
+            # 4. Customer Repeat vs One-Time Retention
+            cursor.execute(
+                """
+                SELECT
+                    COUNT(*) AS total_customers,
+                    SUM(CASE WHEN order_cnt >= 2 THEN 1 ELSE 0 END) AS repeat_customers
+                FROM (
+                    SELECT CustomerID, COUNT(SalesOrderID) AS order_cnt
+                    FROM Sales.SalesOrderHeader
+                    GROUP BY CustomerID
+                ) t
+                """
+            )
+            cust_row = cursor.fetchone()
+            if cust_row:
+                total_cust = int(cust_row[0] or 0)
+                repeat_cust = int(cust_row[1] or 0)
+
+    except Exception as exc:
+        return JsonResponse({"error": f"Forecast query error: {str(exc)}"}, status=500)
+
+    forecast_sales, moving_avg = _linear_forecast(hist_sales, horizon=horizon)
+    future_labels = _next_month_labels(hist_labels[-1] if hist_labels else "2014-06", horizon=horizon)
+
+    projected_revenue_total = round(sum(forecast_sales), 2)
+    recent_window_total = sum(hist_sales[-horizon:]) if hist_sales else 0.0
+    projected_growth_pct = (
+        round(((projected_revenue_total - recent_window_total) / recent_window_total) * 100, 1)
+        if recent_window_total > 0 else 0.0
+    )
+
+    growth_factor = 1.0 + max(-0.15, min(0.35, projected_growth_pct / 100.0))
+    total_projected_units = 0
+    for c_name, c_units, c_rev in cat_raw:
+        units = int(c_units or 0)
+        rev = float(c_rev or 0) * mult
+        proj_units = int(round(units * (horizon / 12.0) * growth_factor))
+        proj_rev = round(rev * (horizon / 12.0) * growth_factor, 2)
+        total_projected_units += proj_units
+        demand_categories.append({
+            "category": str(c_name),
+            "historical_units": units,
+            "projected_units": proj_units,
+            "projected_revenue": proj_rev,
+            "demand_signal": "High Surge" if growth_factor >= 1.08 else ("Steady Growth" if growth_factor >= 1.0 else "Softening"),
+        })
+
+    for p_name, p_units in prod_raw:
+        u_sold = int(p_units or 0)
+        proj_u = int(round(u_sold * (horizon / 24.0) * max(0.85, growth_factor)))
+        demand_products.append({
+            "product_name": str(p_name),
+            "historical_units": u_sold,
+            "projected_units": proj_u,
+            "recommended_stock": int(round(proj_u * 1.15)),
+        })
+
+    retention_rate = round((repeat_cust / total_cust) * 100, 1) if total_cust > 0 else 0.0
+    projected_retention_rate = round(min(95.0, retention_rate + (1.8 if projected_growth_pct >= 0 else -0.9)), 1)
+    at_risk_customers = int(round((total_cust - repeat_cust) * 0.24))
+
+    return JsonResponse({
+        "currency": {
+            "code": cfg.currency_code,
+            "symbol": cfg.currency_symbol,
+            "multiplier": mult,
+        },
+        "horizon": horizon,
+        "summary": {
+            "projected_revenue": projected_revenue_total,
+            "projected_growth_pct": projected_growth_pct,
+            "projected_units": total_projected_units,
+            "retention_rate": retention_rate,
+            "projected_retention_rate": projected_retention_rate,
+            "at_risk_customers": at_risk_customers,
+        },
+        "sales_trend": {
+            "historical_labels": hist_labels,
+            "historical_values": hist_sales,
+            "moving_average": moving_avg,
+            "forecast_labels": future_labels,
+            "forecast_values": forecast_sales,
+        },
+        "demand_forecast": {
+            "by_category": demand_categories,
+            "top_products": demand_products,
+        },
+        "retention_forecast": {
+            "total_customers": total_cust,
+            "repeat_customers": repeat_cust,
+            "one_time_customers": max(0, total_cust - repeat_cust),
+            "retention_rate": retention_rate,
+            "projected_retention_rate": projected_retention_rate,
+            "at_risk_customers": at_risk_customers,
+        },
+    })
 
 
 # ==============================================================================
@@ -555,7 +797,7 @@ def audit_export_api(request):
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     stamp = timezone.localdate().isoformat()
     response["Content-Disposition"] = f'attachment; filename="JBABEWorks_audit_logs_{stamp}.csv"'
-    response.write("﻿")
+    response.write("\ufeff")
     writer = csv.writer(response)
     writer.writerow(["Timestamp", "User", "Role", "Action", "Module", "Status", "IP Address", "Details"])
     for e in qs:

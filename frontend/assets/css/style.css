@@ -16,6 +16,21 @@
    --text-main: var(--charcoal-blue);
    --text-muted: #64748b;
    --border-color: #e2e8f0;
+
+   /* Dynamic Chart Tokens (Follows Light/Dark Mode & Accent Color) */
+   --chart-primary: var(--primary-accent);
+   --chart-secondary: var(--secondary-accent);
+   --chart-tertiary: var(--french-blue);
+   --chart-quaternary: var(--icy-blue);
+   --chart-text: #475569;
+   --chart-grid: rgba(100, 116, 139, 0.14);
+}
+
+body.dark-mode {
+   --chart-text: var(--icy-blue);
+   --chart-grid: rgba(174, 213, 245, 0.12);
+   --chart-tertiary: var(--icy-blue);
+   --chart-quaternary: var(--french-blue);
 }
 
 body {
@@ -164,7 +179,7 @@ body.widescreen-mode .container-fluid {
    max-width: 100% !important;
 }
 
-/* Print Layout for Audit Logs */
+/* Print Layout */
 @media print {
    .noprint {
       display: none !important;
@@ -179,17 +194,24 @@ body.widescreen-mode .container-fluid {
       border: 1px solid #dee2e6 !important;
    }
 }
+
 /* =========================================
    Sidebar groups
    ========================================= */
 .sidebar-section-label {
    font-size: 0.68rem;
    font-weight: 700;
-   letter-spacing: 0.08em;
+   letter-spacing: 0.1em;
    text-transform: uppercase;
-   color: var(--icy-blue);
-   opacity: 0.65;
-   padding: 0 0.75rem 0.35rem;
+   color: var(--fresh-sky);
+   opacity: 0.85;
+   padding: 0.15rem 0.75rem 0.4rem;
+}
+
+.sidebar-divider {
+   border: 0;
+   border-top: 1px solid rgba(174, 213, 245, 0.2);
+   margin: 0.85rem 0.5rem;
 }
 
 /* =========================================
@@ -387,3 +409,142 @@ body.dark-mode .dropdown-menu .form-check-label { color: #f1f5f9; }
    background-color: #f8f9fa;
 }
 body.dark-mode .table-scroll-10 thead.sticky-top th { background-color: var(--charcoal-blue) !important; }
+
+/* =========================================
+   Global Table Alignment Across All Modules
+   ========================================= */
+.table th,
+.table td {
+   padding: 0.55rem 1rem;
+   vertical-align: middle;
+   font-variant-numeric: tabular-nums;
+}
+
+.table th.text-end,
+.table td.text-end {
+   text-align: left !important;
+}
+
+/* Keep action icon buttons aligned cleanly on the right in User Management */
+#users-tbody td:last-child,
+#users-tbody th:last-child {
+   text-align: right !important;
+}
+
+/* =========================================
+   Sales Analysis Comparative Tables (Share Bar & Best Period)
+   ========================================= */
+#cmp-member-head th,
+#cmp-member-tbody td,
+#cmp-period-head th,
+#cmp-period-tbody td {
+   padding: 0.55rem 1.15rem;
+   white-space: nowrap;
+}
+
+/* Share column: aligned progress bar + left-aligned percentage */
+#cmp-member-tbody td:nth-child(3) {
+   position: relative;
+   padding-left: calc(1.15rem + 78px);
+}
+
+#cmp-member-tbody .share-bar {
+   position: absolute;
+   left: 1.15rem;
+   top: 50%;
+   transform: translateY(-50%);
+   width: 68px;
+   height: 7px;
+   margin: 0;
+   border-radius: 999px;
+   background: rgba(100, 116, 139, 0.2);
+   overflow: hidden;
+}
+
+#cmp-member-tbody .share-bar > span {
+   display: block;
+   height: 100%;
+   border-radius: 999px;
+   background: var(--primary-accent);
+}
+
+/* Best Quarter / Period column: aligned badge + left-aligned ₱ amount */
+#cmp-member-tbody td:last-child {
+   position: relative;
+   padding-left: calc(1.15rem + 4.8rem);
+}
+
+#cmp-member-tbody td:last-child > .badge {
+   position: absolute;
+   left: 1.15rem;
+   top: 50%;
+   transform: translateY(-50%);
+   width: 4.1rem;
+   text-align: center;
+}
+
+/* =========================================
+   Audit Logs: Equal-Width Charts & Compact Filters/Table
+   ========================================= */
+body[data-page="audit"] #audit-action-chart,
+body[data-page="audit"] canvas[id*="action"] {
+   max-height: 265px !important;
+}
+
+body[data-page="audit"] .form-control,
+body[data-page="audit"] .form-select,
+body[data-page="audit"] .btn-sm,
+body[data-page="audit"] label,
+body[data-page="audit"] small {
+   font-size: 0.78rem !important;
+   padding-top: 0.25rem;
+   padding-bottom: 0.25rem;
+}
+
+body[data-page="audit"] .table th,
+body[data-page="audit"] .table td {
+   font-size: 0.8rem;
+   padding: 0.42rem 0.75rem;
+}
+
+/* =========================================
+   Forecasting & Trends Module (Theme-Driven)
+   ========================================= */
+.fc-range-accent {
+   accent-color: var(--primary-accent);
+}
+
+.fc-btn-primary {
+   background-color: var(--primary-accent) !important;
+   border-color: var(--primary-accent) !important;
+   color: #ffffff !important;
+}
+
+.fc-btn-outline {
+   border-color: var(--primary-accent) !important;
+   color: var(--primary-accent) !important;
+   background-color: transparent !important;
+}
+
+.fc-btn-outline:hover {
+   background-color: var(--primary-accent) !important;
+   color: #ffffff !important;
+}
+
+body.dark-mode .fc-btn-outline {
+   border-color: var(--secondary-accent) !important;
+   color: var(--icy-blue) !important;
+}
+
+body.dark-mode .fc-btn-outline:hover {
+   background-color: var(--primary-accent) !important;
+   color: #ffffff !important;
+}
+
+.fc-kpi-accent {
+   color: var(--primary-accent) !important;
+}
+
+.fc-kpi-secondary {
+   color: var(--secondary-accent) !important;
+}

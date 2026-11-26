@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         currency_multiplier: 1.0
     };
 
-    const palettes = {
+const palettes = {
         // Validated categorical order: passes colour-vision-deficiency separation in light and dark mode
         Accessible: {
             primary: '#257de0',
@@ -35,10 +35,26 @@ document.addEventListener('DOMContentLoaded', async () => {
             fill: 'rgba(54, 122, 223, 0.18)',
             colors: ['#367ADF', '#4FACE5', '#394988', '#AED5F5', '#353A4C', '#1D4ED8', '#0284C7']
         },
-        Ocean: { primary: '#0d9488', fill: 'rgba(13, 148, 136, 0.15)', colors: ['#0d9488', '#0284c7', '#38bdf8', '#2dd4bf', '#0f766e'] },
-        Sunset: { primary: '#f97316', fill: 'rgba(249, 115, 22, 0.15)', colors: ['#f97316', '#ef4444', '#f59e0b', '#ec4899', '#d97706'] },
-        Forest: { primary: '#16a34a', fill: 'rgba(22, 163, 74, 0.15)', colors: ['#16a34a', '#15803d', '#4ade80', '#84cc16', '#065f46'] },
-        Mono: { primary: '#475569', fill: 'rgba(71, 85, 105, 0.15)', colors: ['#334155', '#64748b', '#94a3b8', '#475569', '#1e293b'] }
+        Ocean: {
+            primary: '#0d9488',
+            fill: 'rgba(13, 148, 136, 0.15)',
+            colors: ['#0d9488', '#0284c7', '#38bdf8', '#2dd4bf', '#0f766e']
+        },
+        OkabeIto: {
+            primary: '#0072B2',
+            fill: 'rgba(0, 114, 178, 0.16)',
+            colors: ['#0072B2', '#56B4E9', '#E69F00', '#F0E442', '#CC79A7']
+        },
+        NavyEarth: {
+            primary: '#1E3A8A',
+            fill: 'rgba(30, 58, 138, 0.16)',
+            colors: ['#1E3A8A', '#71635D', '#3A201A', '#D49791']
+        },
+        NavySlate: {
+            primary: '#1E3A8A',
+            fill: 'rgba(30, 58, 138, 0.16)',
+            colors: ['#1E3A8A', '#426173', '#C0B49A', '#5B3E27']
+        }
     };
 
     const presetRates = {
@@ -155,7 +171,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Build & Enforce Top Export Toolbar (Export CSV, Export PDF, and Single Export PNG Checkbox Dropdown)
     const exportEligiblePages = ['executive', 'sales', 'customers', 'revenue_loss', 'cost'];
-    const isBulkExportAllowed = ['ADMINISTRATOR', 'MANAGER', 'SUPERVISOR'].includes(sessionRole);
+    const isBulkExportAllowed = [
+    'ADMINISTRATOR',
+    'MANAGER',
+    'SUPERVISOR',
+    'SALES_ANALYST',
+    'CUSTOMER_ANALYST',
+    'FINANCIAL_ANALYST',
+    'COST_ANALYST'
+].includes(sessionRole);
 
     if (exportEligiblePages.includes(currentPageKey)) {
         const pageHeader = document.querySelector('.container-fluid h2, .container-fluid h3');
@@ -390,7 +414,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (currencyObj) activeCurrency = currencyObj;
         const badge = document.getElementById('active-currency-badge');
         if (badge) {
-            badge.textContent = `Currency: ${activeCurrency.currency_code} (${activeCurrency.currency_symbol}) × ${activeCurrency.currency_multiplier}`;
+            badge.textContent = `Currency: ${activeCurrency.currency_code} (${activeCurrency.currency_symbol})`;
         }
     }
 
@@ -787,7 +811,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
         const emit = () => { refreshLabel(); wrap.dispatchEvent(new Event('change')); };
         boxes.forEach(b => b.addEventListener('change', emit));
-        wrap.querySelector('.ms-clear').addEventListener('click', () => { boxes.forEach(b => { b.checked = false; }); emit(); });
+        wrap.querySelector('.ms-clear').addEventListener('click', () => {
+                    const allChecked = boxes.every(b => b.checked);
+                    boxes.forEach(b => { b.checked = !allChecked; });
+                    emit();
+                });
 
         Object.defineProperty(wrap, 'value', {
             get: () => {
@@ -1915,7 +1943,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         setHtml('audit-stat-failed', formatCount(sm.failed_logins));
         setHtml('audit-stat-admin', formatCount(sm.admin_changes));
 
-        tbody.innerHTML = logs.length ? logs.map(l => `
+tbody.innerHTML = logs.length ? logs.map(l => `
             <tr class="${l.status !== 'SUCCESS' ? 'row-alert' : ''}">
                 <td class="text-nowrap"><code>${l.timestamp}</code></td>
                 <td class="fw-semibold">${escapeHtml(l.username)}</td>
@@ -1923,9 +1951,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <td><span class="badge ${actionBadgeClass(l.action, l.status)}">${escapeHtml(l.action)}</span></td>
                 <td><span class="badge bg-light text-dark border">${escapeHtml(l.module || 'System')}</span></td>
                 <td><span class="badge ${l.status === 'SUCCESS' ? 'bg-success' : 'bg-danger'}">${l.status}</span></td>
-                <td class="small text-muted">${escapeHtml(l.ip_address || '—')}</td>
                 <td class="small">${escapeHtml(l.details || '—')}</td>
-            </tr>`).join('') : '<tr><td colspan="8" class="text-center text-muted py-3">No audit entries match these filters.</td></tr>';
+            </tr>`).join('') : '<tr><td colspan="7" class="text-center text-muted py-3">No audit entries match these filters.</td></tr>';
 
         const start = pg.total ? (pg.page - 1) * pg.page_size + 1 : 0;
         const end = Math.min(pg.page * pg.page_size, pg.total);

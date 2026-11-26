@@ -31,29 +31,29 @@
         </div>
 
         <div class="row g-3 mb-4">
-            <div class="col-lg-8">
+            <div class="col-lg-6">
                 <div class="card p-3 border-0 shadow-sm h-100">
-                    <h5 class="fw-bold mb-2">Daily Activity</h5>
-                    <div style="height: 220px;"><canvas id="auditDailyChart"></canvas></div>
+                    <h5 class="fw-bold mb-3">Daily Activity</h5>
+                    <div style="height: 280px;"><canvas id="auditDailyChart"></canvas></div>
                 </div>
             </div>
-            <div class="col-lg-4">
+            <div class="col-lg-6">
                 <div class="card p-3 border-0 shadow-sm h-100">
-                    <h5 class="fw-bold mb-2">Events by Action</h5>
-                    <div style="height: 220px;"><canvas id="auditActionChart"></canvas></div>
+                    <h5 class="fw-bold mb-3">Events by Action</h5>
+                    <div style="height: 280px;"><canvas id="auditActionChart"></canvas></div>
                 </div>
             </div>
         </div>
 
         <div class="card p-3 border-0 shadow-sm">
-            <h5 class="fw-bold mb-3 text-teal">Recorded Activity History</h5>
+            <h6 class="fw-bold mb-2 text-teal">Recorded Activity History</h6>
             <div class="row g-2 mb-2 noprint">
-                <div class="col-md-4"><input type="search" class="form-control form-control-sm" id="audit-search" placeholder="Search user, role, action, or details..."></div>
-                <div class="col-6 col-md-2"><select class="form-select form-select-sm" id="audit-user"><option value="">All Users</option></select></div>
-                <div class="col-6 col-md-2"><select class="form-select form-select-sm" id="audit-action"><option value="">All Actions</option></select></div>
-                <div class="col-6 col-md-2"><select class="form-select form-select-sm" id="audit-module"><option value="">All Modules</option></select></div>
+                <div class="col-md-4"><input type="search" class="form-control form-control-sm py-1 small" id="audit-search" placeholder="Search user, role, action, or details..."></div>
+                <div class="col-6 col-md-2"><select class="form-select form-select-sm py-1 small" id="audit-user"><option value="">All Users</option></select></div>
+                <div class="col-6 col-md-2"><select class="form-select form-select-sm py-1 small" id="audit-action"><option value="">All Actions</option></select></div>
+                <div class="col-6 col-md-2"><select class="form-select form-select-sm py-1 small" id="audit-module"><option value="">All Modules</option></select></div>
                 <div class="col-6 col-md-2">
-                    <select class="form-select form-select-sm" id="audit-status">
+                    <select class="form-select form-select-sm py-1 small" id="audit-status">
                         <option value="">All Statuses</option>
                         <option value="SUCCESS">Success</option>
                         <option value="FAILED">Failed</option>
@@ -61,36 +61,36 @@
                     </select>
                 </div>
             </div>
-            <div class="d-flex flex-wrap align-items-center gap-2 mb-3 noprint">
-                <label class="small fw-bold" for="audit-from">From</label>
-                <input type="date" class="form-control form-control-sm w-auto" id="audit-from">
-                <label class="small fw-bold" for="audit-to">To</label>
-                <input type="date" class="form-control form-control-sm w-auto" id="audit-to">
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-3 noprint small">
+                <label class="fw-semibold mb-0" for="audit-from">From</label>
+                <input type="date" class="form-control form-control-sm py-1 w-auto small" id="audit-from">
+                <label class="fw-semibold mb-0" for="audit-to">To</label>
+                <input type="date" class="form-control form-control-sm py-1 w-auto small" id="audit-to">
                 <div class="btn-group btn-group-sm">
-                    <button type="button" class="btn btn-outline-secondary" data-audit-range="1">Today</button>
-                    <button type="button" class="btn btn-outline-secondary" data-audit-range="7">7 days</button>
-                    <button type="button" class="btn btn-outline-secondary" data-audit-range="30">30 days</button>
+                    <button type="button" class="btn btn-outline-secondary py-1" data-audit-range="1">Today</button>
+                    <button type="button" class="btn btn-outline-secondary py-1" data-audit-range="7">7 days</button>
+                    <button type="button" class="btn btn-outline-secondary py-1" data-audit-range="30">30 days</button>
                 </div>
-                <button type="button" class="btn btn-sm btn-link text-decoration-none" id="audit-reset">Reset filters</button>
+                <button type="button" class="btn btn-sm btn-link text-decoration-none py-0" id="audit-reset">Reset filters</button>
             </div>
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0" id="audit-table">
+                <table class="table table-sm table-hover align-middle mb-0 small" id="audit-table">
                     <thead class="table-light">
-                        <tr><th>Timestamp</th><th>User</th><th>Role</th><th>Action</th><th>Module</th><th>Status</th><th>IP</th><th>Details</th></tr>
+                        <tr><th>Timestamp</th><th>User</th><th>Role</th><th>Action</th><th>Module</th><th>Status</th><th>Details</th></tr>
                     </thead>
-                    <tbody id="audit-tbody"><tr><td colspan="8" class="text-center text-muted py-3">Loading audit trail…</td></tr></tbody>
+                    <tbody id="audit-tbody"><tr><td colspan="7" class="text-center text-muted py-3">Loading audit trail…</td></tr></tbody>
                 </table>
             </div>
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 noprint">
                 <small class="text-muted" id="audit-page-info"></small>
                 <div class="d-flex align-items-center gap-2">
-                    <select class="form-select form-select-sm w-auto" id="audit-page-size" aria-label="Rows per page">
+                    <select class="form-select form-select-sm py-1 w-auto small" id="audit-page-size" aria-label="Rows per page">
                         <option value="25">25 / page</option>
                         <option value="50">50 / page</option>
                         <option value="100">100 / page</option>
                     </select>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" id="audit-prev">‹ Prev</button>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" id="audit-next">Next ›</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-1" id="audit-prev">‹ Prev</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-1" id="audit-next">Next ›</button>
                 </div>
             </div>
         </div>

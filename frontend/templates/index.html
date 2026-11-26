@@ -47,18 +47,20 @@
                     <li class="nav-item" id="nav-customers"><a href="/customer_profile.html" target="content-frame" class="nav-link text-white">Customer Profile</a></li>
                     <li class="nav-item" id="nav-revloss"><a href="/revenue_loss.html" target="content-frame" class="nav-link text-white">Revenue &amp; Loss</a></li>
                     <li class="nav-item" id="nav-cost"><a href="/cost_analysis.html" target="content-frame" class="nav-link text-white">Cost Analysis</a></li>
+                    <li class="nav-item" id="nav-forecast"><a href="/forecasting.html" target="content-frame" class="nav-link text-white">Forecasting &amp; Trends</a></li>
                 </ul>
 
                 <div id="sidebar-admin-group">
-                    <div class="sidebar-section-label mt-3">Administration</div>
+                    <hr class="sidebar-divider">
+                    <div class="sidebar-section-label">Administration</div>
                     <ul class="nav nav-pills flex-column gap-1" id="sidebar-admin">
                         <li class="nav-item" id="nav-rbac"><a href="/rbac.html" target="content-frame" class="nav-link text-white">User Management &amp; RBAC</a></li>
                         <li class="nav-item" id="nav-audit"><a href="/audit_logs.html" target="content-frame" class="nav-link text-white">Audit Logs</a></li>
                     </ul>
                 </div>
 
-                <hr class="my-3" style="border-color: rgba(174, 213, 245, 0.25);">
-
+                <hr class="sidebar-divider">
+                <div class="sidebar-section-label">Account</div>
                 <ul class="nav nav-pills flex-column gap-1" id="sidebar-system">
                     <li class="nav-item" id="nav-settings"><a href="/settings.html" target="content-frame" class="nav-link text-white">Settings</a></li>
                     <li class="nav-item" id="nav-profile"><a href="/profile.html" target="content-frame" class="nav-link text-white">My Profile</a></li>
@@ -98,7 +100,7 @@
             const role = (session.role || '').toUpperCase();
             const p = session.permissions || {};
 
-            ['nav-exec', 'nav-sales', 'nav-customers', 'nav-revloss', 'nav-cost', 'nav-rbac', 'nav-audit', 'nav-settings', 'nav-profile'].forEach(id => {
+            ['nav-exec', 'nav-sales', 'nav-customers', 'nav-revloss', 'nav-cost', 'nav-forecast', 'nav-rbac', 'nav-audit', 'nav-settings', 'nav-profile'].forEach(id => {
                 document.getElementById(id)?.classList.remove('d-none');
             });
 
@@ -110,7 +112,6 @@
                 document.getElementById('nav-settings')?.classList.add('d-none');
             }
 
-            // RBAC Policy tab is strictly for Administrator
             if (role !== 'ADMINISTRATOR' && p.can_view_rbac !== true) {
                 document.getElementById('nav-rbac')?.classList.add('d-none');
             }
@@ -122,6 +123,7 @@
             if (p.can_view_customers === false) document.getElementById('nav-customers')?.classList.add('d-none');
             if (p.can_view_revenue_loss === false) document.getElementById('nav-revloss')?.classList.add('d-none');
             if (p.can_view_cost === false) document.getElementById('nav-cost')?.classList.add('d-none');
+            if (p.can_view_forecasting === false) document.getElementById('nav-forecast')?.classList.add('d-none');
 
             let defaultPage = '/executive_central.html';
             if (!isExecOrAdmin) {
