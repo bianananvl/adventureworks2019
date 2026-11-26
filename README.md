@@ -191,4 +191,4 @@ To avoid merge conflicts with the local SQLite governance database (`app_governa
 | **SALES ANALYST** | `sales_analyst` | `sales123` |
 | **CUSTOMER ANALYST** | `customer_analyst` | `customer123` |
 | **FINANCIAL ANALYST** | `financial_analyst` | `financial123` |
-| **COST ANALYST** | `cost_analysis` | `cost123` |
+| **COST ANALYST** | `cost_analyst` | `cost123` |
