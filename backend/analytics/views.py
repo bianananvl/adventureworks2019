@@ -46,6 +46,17 @@ def _json_body(request):
         return {}
 
 
+def _parse_int_list(request, key):
+    """Accepts ?year=2011,2012 or repeated ?year=2011&year=2012 (multi-select checkboxes)."""
+    out = set()
+    for item in request.GET.getlist(key) + request.GET.getlist(f"{key}[]"):
+        for part in str(item).split(","):
+            part = part.strip()
+            if part.isdigit():
+                out.add(int(part))
+    return sorted(out)
+
+
 def _parse_staff_ids(request):
     """
     Accepts either ?staff_ids=274,275 or repeated ?staff_ids=274&staff_ids=275
@@ -165,8 +176,8 @@ def filters_api(request):
 
 @require_permission("can_view_executive")
 def executive_api(request):
-    year = request.GET.get("year")
-    category_id = request.GET.get("category_id")
+    year = _parse_int_list(request, "year")
+    category_id = _parse_int_list(request, "category_id")
     staff_ids = _parse_staff_ids(request)
     cust_data = services.get_customer_profile_report(year=year)
     return JsonResponse(
@@ -184,15 +195,15 @@ def executive_api(request):
             ),
             "cost": services.get_cost_report(year=year, category_id=category_id),
             "prior_year": services.get_prior_year_kpis(year, category_id=category_id),
-            "yearly_overview": services.get_yearly_overview(category_id=category_id),
+            "yearly_overview": services.get_yearly_overview(category_id=category_id, years=year),
         }
     )
 
 
 @require_permission("can_view_sales")
 def sales_api(request):
-    year = request.GET.get("year")
-    category_id = request.GET.get("category_id")
+    year = _parse_int_list(request, "year")
+    category_id = _parse_int_list(request, "category_id")
     staff_ids = _parse_staff_ids(request)
     data = services.get_sales_report(
         year=year, category_id=category_id, staff_ids=staff_ids
@@ -209,8 +220,8 @@ def sales_compare_api(request):
             granularity=request.GET.get("granularity", "month"),
             dimension=request.GET.get("dimension", "total"),
             metric=request.GET.get("metric", "sales_amount"),
-            year=request.GET.get("year"),
-            category_id=request.GET.get("category_id"),
+            year=_parse_int_list(request, "year"),
+            category_id=_parse_int_list(request, "category_id"),
             staff_ids=_parse_staff_ids(request),
         )
     )
@@ -218,17 +229,19 @@ def sales_compare_api(request):
 
 @require_permission("can_view_customers")
 def customer_api(request):
-    year = request.GET.get("year")
+    year = _parse_int_list(request, "year")
     segment = request.GET.get("segment")
     return JsonResponse(
-        services.get_customer_profile_report(year=year, segment=segment)
+        services.get_customer_profile_report(
+            year=year, segment=segment, limit=request.GET.get("limit", 10)
+        )
     )
 
 
 @require_permission("can_view_revenue_loss")
 def revenue_loss_api(request):
-    year = request.GET.get("year")
-    category_id = request.GET.get("category_id")
+    year = _parse_int_list(request, "year")
+    category_id = _parse_int_list(request, "category_id")
     data = services.get_revenue_and_loss_report(year=year, category_id=category_id)
     data["prior_year"] = services.get_prior_year_kpis(year, category_id=category_id)
     return JsonResponse(data)
@@ -239,16 +252,16 @@ def revenue_compare_api(request):
     return JsonResponse(
         services.get_revenue_comparison(
             granularity=request.GET.get("granularity", "year"),
-            year=request.GET.get("year"),
-            category_id=request.GET.get("category_id"),
+            year=_parse_int_list(request, "year"),
+            category_id=_parse_int_list(request, "category_id"),
         )
     )
 
 
 @require_permission("can_view_cost")
 def cost_api(request):
-    year = request.GET.get("year")
-    category_id = request.GET.get("category_id")
+    year = _parse_int_list(request, "year")
+    category_id = _parse_int_list(request, "category_id")
     return JsonResponse(
         services.get_cost_report(year=year, category_id=category_id)
     )

@@ -84,6 +84,24 @@ def get_available_filters():
     }
 
 
+def _int_list(value):
+    """Accepts None, an int, '2011,2012', or a list of those; returns a sorted list of unique ints."""
+    if value in (None, "", []):
+        return []
+    items = value if isinstance(value, (list, tuple, set)) else [value]
+    out = set()
+    for item in items:
+        for part in str(item).split(","):
+            part = part.strip()
+            if part.isdigit():
+                out.add(int(part))
+    return sorted(out)
+
+
+def _in_clause(column, values):
+    return f"{column} IN ({', '.join(['%s'] * len(values))})", list(values)
+
+
 def _build_where_clause(
     year=None,
     category_id=None,
@@ -93,12 +111,16 @@ def _build_where_clause(
 ):
     clauses = ["1=1"]
     params = []
-    if year:
-        clauses.append(f"YEAR({table_alias_header}.OrderDate) = %s")
-        params.append(int(year))
-    if category_id:
-        clauses.append(f"{table_alias_cat}.ProductCategoryID = %s")
-        params.append(int(category_id))
+    years = _int_list(year)
+    if years:
+        sql, vals = _in_clause(f"YEAR({table_alias_header}.OrderDate)", years)
+        clauses.append(sql)
+        params.extend(vals)
+    cats = _int_list(category_id)
+    if cats:
+        sql, vals = _in_clause(f"{table_alias_cat}.ProductCategoryID", cats)
+        clauses.append(sql)
+        params.extend(vals)
     if staff_ids:
         clean_ids = [int(sid) for sid in staff_ids if str(sid).strip().isdigit()]
         if clean_ids:
@@ -231,9 +253,9 @@ def get_sales_report(year=None, category_id=None, staff_ids=None):
         low_products = _scale_money(_dictfetchall(cursor), ["total_sales"], mult)
 
         # 6. Multi-Staff Yearly Comparison (for 2+ checked staff across years)
-        # Note: deliberately excludes single-year filter so users see differences across all years
+        # Respects the selected years (all years when none are selected)
         comp_where, comp_params = _build_where_clause(
-            year=None, category_id=category_id, staff_ids=clean_staff_ids
+            year=year, category_id=category_id, staff_ids=clean_staff_ids
         )
         cursor.execute(
             f"""
@@ -286,17 +308,22 @@ def get_sales_report(year=None, category_id=None, staff_ids=None):
 # ==============================================================================
 # MODULE 2: CUSTOMER PROFILE
 # ==============================================================================
-def get_customer_profile_report(year=None, segment=None):
+def get_customer_profile_report(year=None, segment=None, limit=10):
     currency = get_currency_config()
     mult = currency["currency_multiplier"]
-    year_int = int(year) if year else None
+    years = _int_list(year)
+    try:
+        limit = min(max(int(limit), 5), 100)
+    except (TypeError, ValueError):
+        limit = 10
     seg_clean = (segment or "").strip()
 
     base_clauses = ["1=1"]
     base_params = []
-    if year_int:
-        base_clauses.append("YEAR(soh.OrderDate) = %s")
-        base_params.append(year_int)
+    if years:
+        sql, vals = _in_clause("YEAR(soh.OrderDate)", years)
+        base_clauses.append(sql)
+        base_params.extend(vals)
 
     vip_clauses = list(base_clauses)
     vip_params = list(base_params)
@@ -333,7 +360,7 @@ def get_customer_profile_report(year=None, segment=None):
 
         cursor.execute(
             f"""
-            SELECT TOP 15
+            SELECT TOP ({limit})
                 c.CustomerID,
                 c.AccountNumber,
                 COALESCE(
@@ -397,7 +424,10 @@ def get_customer_profile_report(year=None, segment=None):
             c["loyalty_label"] = "Repeat"
         else:
             c["loyalty_label"] = "One-Time"
-        c["value_label"] = "Platinum" if idx < 3 else ("Gold" if idx < 8 else "Silver")
+        # Value tier by rank within the list: top 20% Platinum, next 30% Gold, rest Silver
+        n = len(high_value_customers) or 1
+        pos = idx / n
+        c["value_label"] = "Platinum" if pos < 0.2 else ("Gold" if pos < 0.5 else "Silver")
         c["segment_label"] = "B2B Store" if c.get("segment") == "Store" else "B2C Individual"
 
     return {
@@ -405,6 +435,7 @@ def get_customer_profile_report(year=None, segment=None):
         "currency": currency,
         "segments": segments,
         "high_value_customers": high_value_customers,
+        "top_limit": limit,
         "frequency_distribution": frequency_distribution,
         "governance": {
             "source_tables": [
@@ -546,8 +577,8 @@ def get_cost_report(year=None, category_id=None):
     currency = get_currency_config()
     mult = currency["currency_multiplier"]
     where_sql, params = _build_where_clause(year, category_id)
-    po_where = "YEAR(poh.OrderDate) = %s" if year else "1=1"
-    po_params = [int(year)] if year else []
+    po_years = _int_list(year)
+    po_where, po_params = _in_clause("YEAR(poh.OrderDate)", po_years) if po_years else ("1=1", [])
 
     with connections["adventureworks"].cursor() as cursor:
         cursor.execute(
@@ -841,9 +872,10 @@ def get_sales_comparison(
     dim = SALES_DIMENSIONS[dim_key]
     metric = metric if metric in ("sales_amount", "total_orders", "units_sold") else "sales_amount"
 
-    # A yearly comparison always spans every year so there is something to compare.
-    effective_year = None if granularity == "year" else year
+    # Respects the selected years; like-for-like growth below always looks at all years.
+    effective_year = _int_list(year) or None
     where_sql, params = _build_where_clause(effective_year, category_id, staff_ids)
+    lfl_where, lfl_params = _build_where_clause(None, category_id, staff_ids)
     period_sql, period_group = _period_select(granularity)
 
     with connections["adventureworks"].cursor() as cursor:
@@ -895,7 +927,7 @@ def get_sales_comparison(
                 "total_orders": "COUNT(DISTINCT soh.SalesOrderID)",
                 "units_sold": "SUM(sod.OrderQty)",
             }[metric]
-            lfl = _like_for_like(_monthly_values(cursor, where_sql, params, value_sql))
+            lfl = _like_for_like(_monthly_values(cursor, lfl_where, lfl_params, value_sql))
 
     # Ordered period axis
     period_info = {}
@@ -989,7 +1021,7 @@ def get_revenue_comparison(granularity="year", year=None, category_id=None):
     currency = get_currency_config()
     mult = currency["currency_multiplier"]
     granularity = _clean_granularity(granularity)
-    effective_year = None if granularity == "year" else year
+    effective_year = _int_list(year) or None
     where_sql, params = _build_where_clause(effective_year, category_id)
     period_sql, period_group = _period_select(granularity)
     money = ["gross_revenue", "discount_erosion", "net_revenue", "cogs", "gross_profit"]
@@ -1017,7 +1049,8 @@ def get_revenue_comparison(granularity="year", year=None, category_id=None):
         period_rows = _scale_money(_dictfetchall(cursor), money, mult)
 
         # Category profitability across years (respects category filter, ignores year so years can be compared)
-        cat_where, cat_params = _build_where_clause(None, category_id)
+        cat_where, cat_params = _build_where_clause(effective_year, category_id)
+        all_where, all_params = _build_where_clause(None, category_id)
         cursor.execute(
             f"""
             SELECT
@@ -1040,12 +1073,12 @@ def get_revenue_comparison(granularity="year", year=None, category_id=None):
 
         lfl_rev = lfl_gp = None
         if granularity == "year":
-            lfl_rev = _like_for_like(_monthly_values(cursor, where_sql, params, "SUM(sod.LineTotal)"))
+            lfl_rev = _like_for_like(_monthly_values(cursor, all_where, all_params, "SUM(sod.LineTotal)"))
             lfl_gp = _like_for_like(
-                _monthly_values(cursor, where_sql, params, "SUM(sod.LineTotal - (p.StandardCost * sod.OrderQty))")
+                _monthly_values(cursor, all_where, all_params, "SUM(sod.LineTotal - (p.StandardCost * sod.OrderQty))")
             )
         all_months = _like_for_like(
-            _monthly_values(cursor, cat_where, cat_params, "COUNT(DISTINCT soh.SalesOrderID)")
+            _monthly_values(cursor, all_where, all_params, "COUNT(DISTINCT soh.SalesOrderID)")
         )
 
     by_key = {}
@@ -1128,10 +1161,12 @@ def get_revenue_comparison(granularity="year", year=None, category_id=None):
 
 
 def get_prior_year_kpis(year, category_id=None):
-    """KPIs for year-1 so the dashboards can show year-over-year deltas."""
-    if not year:
+    """KPIs for year-1 so the dashboards can show year-over-year deltas (single year selected only)."""
+    years = _int_list(year)
+    if len(years) != 1:
         return None
-    prior = int(year) - 1
+    year = years[0]
+    prior = year - 1
     currency = get_currency_config()
     mult = currency["currency_multiplier"]
     where_sql, params = _build_where_clause(prior, category_id)
@@ -1184,7 +1219,7 @@ def get_prior_year_kpis(year, category_id=None):
     return row
 
 
-def get_yearly_overview(category_id=None):
+def get_yearly_overview(category_id=None, years=None):
     """Executive year-by-year snapshot: revenue, gross profit, orders, customers, margin."""
     currency = get_currency_config()
     mult = currency["currency_multiplier"]
@@ -1222,4 +1257,7 @@ def get_yearly_overview(category_id=None):
         r["revenue_growth_pct"] = _pct_change(net, float(prev["net_revenue"] or 0)) if prev else None
         r["partial_year"] = int(r["active_months"] or 0) < 12
         prev = r
+    selected = _int_list(years)
+    if selected:
+        rows = [r for r in rows if int(r["year"]) in selected]
     return rows

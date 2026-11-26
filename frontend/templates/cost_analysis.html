@@ -31,10 +31,10 @@
         <p class="text-muted mb-4">Direct StandardCost COGS, outbound freight/tax, and vendor procurement spend from <code>Purchasing.PurchaseOrderHeader</code>.</p>
 
         <div class="row g-3 mb-4">
-            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm kpi-card"><small class="text-muted">Total Standard COGS</small><h3 class="fw-bold my-1 money-val" id="cost-standard-cogs" data-usd="0">—</h3></div></div>
-            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm kpi-card"><small class="text-muted">Outbound Freight Cost</small><h3 class="fw-bold my-1 money-val" id="cost-outbound-freight" data-usd="0">—</h3></div></div>
-            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm kpi-card"><small class="text-muted">Sales Tax Amount</small><h3 class="fw-bold my-1 money-val" id="cost-tax-amount" data-usd="0">—</h3></div></div>
-            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm kpi-card"><small class="text-muted">Vendor Procurement Spend</small><h3 class="fw-bold my-1 money-val" id="cost-procurement-spend" data-usd="0">—</h3><small class="text-muted" id="cost-po-count">—</small></div></div>
+            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm kpi-card"><small class="text-muted">Total Standard COGS</small><h3 class="fw-bold my-1 money-val" id="cost-standard-cogs">—</h3><small class="text-muted d-block">StandardCost × units sold</small></div></div>
+            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm kpi-card"><small class="text-muted">Outbound Freight Cost</small><h3 class="fw-bold my-1 money-val" id="cost-outbound-freight">—</h3><small class="text-muted d-block">Shipping to customers</small></div></div>
+            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm kpi-card"><small class="text-muted">Sales Tax Amount</small><h3 class="fw-bold my-1 money-val" id="cost-tax-amount">—</h3><small class="text-muted d-block">Tax on sales orders</small></div></div>
+            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm kpi-card"><small class="text-muted">Vendor Procurement Spend</small><h3 class="fw-bold my-1 money-val" id="cost-procurement-spend">—</h3><small class="text-muted d-block" id="cost-po-count">—</small></div></div>
         </div>
 
         <div class="row g-3 mb-4">
@@ -56,7 +56,7 @@
                     <div class="table-responsive">
                         <table class="table table-sm align-middle mb-0">
                             <thead class="table-light">
-                                <tr><th>Category</th><th>Total COGS</th><th>Total Revenue</th><th>Cost Ratio</th></tr>
+                                <tr><th>Category</th><th class="text-end">Total COGS</th><th class="text-end">Total Revenue</th><th class="text-end">Cost Ratio</th></tr>
                             </thead>
                             <tbody id="cost-category-tbody"></tbody>
                         </table>
@@ -70,7 +70,7 @@
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
-                        <tr><th>#</th><th>Product Name</th><th>Unit Standard Cost</th><th>Units Sold</th><th>Cumulative COGS</th></tr>
+                        <tr><th>#</th><th>Product Name</th><th class="text-end">Unit Standard Cost</th><th class="text-end">Units Sold</th><th class="text-end">Cumulative COGS</th></tr>
                     </thead>
                     <tbody id="top-cost-products-tbody"></tbody>
                 </table>

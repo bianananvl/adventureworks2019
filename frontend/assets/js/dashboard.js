@@ -5,7 +5,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 1. Saved Preferences & Theme
     const savedTheme = localStorage.getItem('aw_theme') || 'light';
-    let savedPalette = localStorage.getItem('aw_palette') || 'Azure';
+    // Colour-blind-safe palette is the default; existing users are moved onto it once.
+    try {
+        if (!localStorage.getItem('aw_palette_cvd_migrated')) {
+            localStorage.setItem('aw_palette', 'Accessible');
+            localStorage.setItem('aw_palette_cvd_migrated', '1');
+        }
+    } catch (err) {}
+    let savedPalette = localStorage.getItem('aw_palette') || 'Accessible';
     const savedWidescreen = localStorage.getItem('aw_widescreen') === 'true';
 
     // Active backend currency configuration (already applied by backend SQL queries)
@@ -16,6 +23,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 
     const palettes = {
+        // Validated categorical order: passes colour-vision-deficiency separation in light and dark mode
+        Accessible: {
+            primary: '#257de0',
+            fill: 'rgba(37, 125, 224, 0.15)',
+            colors: ['#257de0', '#f47230', '#00b894', '#f2a600', '#ee7fac', '#008a17', '#6a4ce2', '#ec4647'],
+            dark: ['#338ced', '#e76624', '#00a888', '#d28e05', '#e24d8b', '#0aac23', '#9887ef', '#eb6263']
+        },
         Azure: {
             primary: '#367ADF',
             fill: 'rgba(54, 122, 223, 0.18)',
@@ -381,12 +395,45 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function applyPaletteToUI(paletteName) {
-        const pal = palettes[paletteName] || palettes.Azure;
+        const pal = palettes[paletteName] || palettes.Accessible;
         document.documentElement.style.setProperty('--primary-accent', pal.primary);
         Object.keys(chartDataCache).forEach(id => {
             const cached = chartDataCache[id];
             if (cached && chartInstances[id]) renderChart(id, cached.type, cached.labels, cached.datasets, cached.opts);
         });
+    }
+
+    const OTHER_COLOR = '#8a8f98';
+    const colorRegistry = {};
+
+    function activeColors() {
+        const pal = palettes[savedPalette] || palettes.Accessible;
+        return document.body.classList.contains('dark-mode') && pal.dark ? pal.dark : pal.colors;
+    }
+
+    // Dark ink on light fills (yellow, aqua, pink), white on dark fills
+    function textOn(hex) {
+        const n = parseInt(String(hex).replace('#', ''), 16);
+        const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => {
+            const c = v / 255;
+            return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+        });
+        const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        return (lum + 0.05) / 0.05 > 1.05 / (lum + 0.05) ? 'text-dark' : 'text-white';
+    }
+
+    // Colour follows the entity (series / category name), not its rank, so filters never repaint survivors.
+    function colorFor(scope, name) {
+        if (/^Other\b/.test(String(name))) return OTHER_COLOR;
+        const colors = activeColors();
+        const reg = colorRegistry[scope] || (colorRegistry[scope] = {});
+        if (reg[name] === undefined) {
+            const used = new Set(Object.values(reg));
+            let slot = 0;
+            while (used.has(slot) && slot < colors.length) slot++;
+            reg[name] = slot < colors.length ? slot : Object.keys(reg).length % colors.length;
+        }
+        return colors[reg[name] % colors.length];
     }
 
     // Draws value labels on bars/points and % share on pie/doughnut slices
@@ -414,12 +461,32 @@ document.addEventListener('DOMContentLoaded', async () => {
                     meta.data.forEach((arc, i) => {
                         if (!total || values[i] / total < 0.05) return;
                         const pos = arc.tooltipPosition();
-                        ctx.fillStyle = '#ffffff';
-                        ctx.fillText(`${((values[i] / total) * 100).toFixed(1)}%`, pos.x, pos.y);
+                        const bg = Array.isArray(ds.backgroundColor) ? ds.backgroundColor[i] : ds.backgroundColor;
+                        ctx.fillStyle = textOn(bg) === 'text-dark' ? '#1a1e29' : '#ffffff';
+                        const pct = `${((values[i] / total) * 100).toFixed(1)}%`;
+                        if (chart.$sliceValues) {
+                            ctx.fillText(fmt(values[i], ds), pos.x, pos.y - 7);
+                            ctx.font = '500 10px "Instrument Sans", sans-serif';
+                            ctx.fillText(pct, pos.x, pos.y + 7);
+                            ctx.font = '600 11px "Instrument Sans", sans-serif';
+                        } else {
+                            ctx.fillText(pct, pos.x, pos.y);
+                        }
                     });
+                    if (chart.$centerLabel && type === 'doughnut' && meta.data[0]) {
+                        const { x, y } = meta.data[0];
+                        ctx.fillStyle = isDark ? '#AED5F5' : '#64748b';
+                        ctx.font = '500 11px "Instrument Sans", sans-serif';
+                        ctx.fillText(chart.$centerLabel.title, x, y - 9);
+                        ctx.fillStyle = isDark ? '#f8fafc' : '#353A4C';
+                        ctx.font = '700 15px "Instrument Sans", sans-serif';
+                        ctx.fillText(chart.$centerLabel.value, x, y + 9);
+                        ctx.font = '600 11px "Instrument Sans", sans-serif';
+                    }
                     return;
                 }
                 if (meta.data.length * visibleCount > 48) return;
+                if (meta.type !== 'line' && meta.data.length > 1 && Math.abs(meta.data[1].x - meta.data[0].x) / Math.max(visibleCount, 1) < 46 && visibleCount > 1) return;
                 if (meta.type === 'line' && (meta.data.length > 16 || ds.yAxisID === 'y1')) return;
                 ctx.textBaseline = 'bottom';
                 ctx.fillStyle = isDark ? '#E2E8F0' : '#353A4C';
@@ -583,10 +650,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         const stackToggle = document.querySelector(`.chart-stack-toggle[data-target="${canvasId}"]`);
         const effectiveOpts = { ...opts, stacked: stackToggle ? stackToggle.checked && type === 'bar' : !!opts.stacked };
 
-        const pal = palettes[savedPalette] || palettes.Azure;
+        const pal = palettes[savedPalette] || palettes.Accessible;
         const isRound = type === 'pie' || type === 'doughnut';
-        const styledDatasets = datasets.map((ds, idx) => {
-            const color = pal.colors[idx % pal.colors.length];
+        const perCategory = isRound || (datasets.length === 1 && opts.colorByCategory);
+        const keyOf = (ds) => String(ds.label || '').replace(/\s*\([A-Z]{3}\)$/, '');
+        const surface = document.body.classList.contains('dark-mode') ? '#252a38' : '#ffffff';
+        const styledDatasets = datasets.map((ds) => {
+            const color = datasets.length === 1 && !perCategory ? activeColors()[0] : colorFor(canvasId, keyOf(ds));
             const dsType = ds.type || type;
             if (dsType === 'line') {
                 return {
@@ -594,18 +664,23 @@ document.addEventListener('DOMContentLoaded', async () => {
                     borderColor: color,
                     backgroundColor: datasets.length === 1 ? pal.fill : color,
                     pointBackgroundColor: color,
+                    pointBorderColor: surface,
+                    pointRadius: 3,
+                    borderWidth: 2,
+                    borderDash: ds.yAxisID === 'y1' ? [6, 4] : undefined,
                     fill: datasets.length === 1 && !ds.type,
-                    tension: 0.35,
+                    tension: 0.3,
                     spanGaps: true,
                     order: ds.type ? 0 : 1
                 };
             }
             return {
                 ...ds,
-                backgroundColor: isRound || datasets.length === 1 ? pal.colors : color,
-                borderColor: isRound ? (document.body.classList.contains('dark-mode') ? '#252a38' : '#ffffff') : undefined,
-                borderWidth: isRound ? 2 : 0,
+                backgroundColor: perCategory ? labels.map(l => colorFor(`${canvasId}:cat`, l)) : color,
+                borderColor: surface,
+                borderWidth: isRound ? 2 : { top: 0, right: 2, bottom: 0, left: 2 },
                 borderRadius: type === 'bar' ? 4 : 0,
+                borderSkipped: 'start',
                 order: 1
             };
         });
@@ -620,6 +695,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         const baseFmt = effectiveOpts.percent ? (v => formatPct(v)) : (effectiveOpts.money === false ? formatCount : formatMoney);
         chart.$valueFormatter = (v, ds) => (ds && ds.yAxisID === 'y1' ? formatPct(v) : baseFmt(v));
+        chart.$sliceValues = !!effectiveOpts.sliceValues;
+        chart.$centerLabel = isRound ? effectiveOpts.centerLabel : null;
+        if (effectiveOpts.legendValues && isRound) {
+            const gen = Chart.overrides[type].plugins.legend.labels.generateLabels;
+            chart.options.plugins.legend.labels.generateLabels = (c) => gen(c).map(item => {
+                const v = c.data.datasets[0].data[item.index];
+                return { ...item, text: `${item.text}: ${baseFmt(v)}` };
+            });
+            chart.update();
+        }
         chartInstances[canvasId] = chart;
     }
 
@@ -663,8 +748,64 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // 2. Populate Live Filters from AdventureWorks2019 (/api/filters/)
-    const yearFilter = document.getElementById('global-year');
-    const categoryFilter = document.getElementById('global-category');
+    let yearFilter = document.getElementById('global-year');
+    let categoryFilter = document.getElementById('global-category');
+
+    /**
+     * Replaces a <select> with a checkbox dropdown so users can pick one, several or all values
+     * (e.g. 2011 + 2012 only). The returned wrapper exposes `.value` as a comma-separated list and
+     * fires a 'change' event, so the rest of the code treats it like the old <select>.
+     */
+    function buildMultiSelect(selectEl, items, { allLabel, noun }) {
+        const id = selectEl.id;
+        const wrap = document.createElement('div');
+        wrap.className = 'dropdown multi-select';
+        wrap.id = id;
+        wrap.innerHTML = `
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle multi-select-btn" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">${escapeHtml(allLabel)}</button>
+            <div class="dropdown-menu p-2 shadow multi-select-menu">
+                <div class="d-flex justify-content-between px-2 pb-1 mb-1 border-bottom">
+                    <small class="fw-bold text-muted">Select one or more ${escapeHtml(noun)}</small>
+                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none ms-3 ms-clear">All</button>
+                </div>
+                ${items.map(it => `
+                    <div class="form-check mx-2 my-1">
+                        <input class="form-check-input ms-check" type="checkbox" value="${escapeHtml(it.value)}" id="${id}-cb-${escapeHtml(it.value)}">
+                        <label class="form-check-label small" for="${id}-cb-${escapeHtml(it.value)}">${escapeHtml(it.label)}</label>
+                    </div>`).join('')}
+            </div>`;
+        selectEl.replaceWith(wrap);
+
+        const btn = wrap.querySelector('.multi-select-btn');
+        const boxes = Array.from(wrap.querySelectorAll('.ms-check'));
+        const labelFor = v => (items.find(i => String(i.value) === String(v)) || {}).label || v;
+        const refreshLabel = () => {
+            const sel = boxes.filter(b => b.checked).map(b => b.value);
+            btn.textContent = sel.length === 0 || sel.length === boxes.length
+                ? allLabel
+                : (sel.length <= 2 ? sel.map(labelFor).join(', ') : `${sel.length} ${noun} selected`);
+        };
+        const emit = () => { refreshLabel(); wrap.dispatchEvent(new Event('change')); };
+        boxes.forEach(b => b.addEventListener('change', emit));
+        wrap.querySelector('.ms-clear').addEventListener('click', () => { boxes.forEach(b => { b.checked = false; }); emit(); });
+
+        Object.defineProperty(wrap, 'value', {
+            get: () => {
+                const sel = boxes.filter(b => b.checked).map(b => b.value);
+                return sel.length === boxes.length ? '' : sel.join(',');
+            },
+            set: (v) => {
+                const want = String(v || '').split(',').filter(Boolean);
+                boxes.forEach(b => { b.checked = want.includes(b.value); });
+                refreshLabel();
+            }
+        });
+        Object.defineProperty(wrap, 'disabled', {
+            set: (d) => { btn.disabled = !!d; },
+            get: () => btn.disabled
+        });
+        return wrap;
+    }
     const staffCheckboxList = document.getElementById('staff-checkbox-list');
     const staffDropdownBtn = document.getElementById('staffDropdownBtn');
     const custSearch = document.getElementById('cust-search');
@@ -695,14 +836,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (meta.currency) updateCurrencyBadge(meta.currency);
 
             if (yearFilter && Array.isArray(meta.available_years)) {
-                yearFilter.innerHTML = '<option value="">All Years (2011–2014)</option>' +
-                    meta.available_years.map(y => `<option value="${y}">${y}</option>`).join('');
+                const ys = meta.available_years;
+                yearFilter = buildMultiSelect(yearFilter, ys.map(y => ({ value: String(y), label: String(y) })),
+                    { allLabel: ys.length ? `All Years (${ys[0]}–${ys[ys.length - 1]})` : 'All Years', noun: 'years' });
             }
             if (categoryFilter && Array.isArray(meta.categories)) {
                 const session = JSON.parse(localStorage.getItem('aw_session') || '{}');
                 const lockedCat = session.permissions?.assigned_category_id;
-                categoryFilter.innerHTML = '<option value="">All Product Categories</option>' +
-                    meta.categories.map(c => `<option value="${c.ProductCategoryID}">${c.Name}</option>`).join('');
+                categoryFilter = buildMultiSelect(categoryFilter,
+                    meta.categories.map(c => ({ value: String(c.ProductCategoryID), label: c.Name })),
+                    { allLabel: 'All Product Categories', noun: 'categories' });
                 if (lockedCat) {
                     categoryFilter.value = String(lockedCat);
                     categoryFilter.disabled = true;
@@ -749,6 +892,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (custSegFilter && custSegFilter.value && custSegFilter.value !== 'All') {
             params.set('segment', custSegFilter.value);
         }
+        const custLimit = document.getElementById('cust-limit');
+        if (custLimit) params.set('limit', custLimit.value);
         const staffIds = getSelectedStaffIds();
         if (staffIds.length > 0) {
             params.set('staff_ids', staffIds.join(','));
@@ -769,7 +914,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const pageType = document.body.getAttribute('data-page');
 
     function yearLabel() {
-        return yearFilter && yearFilter.value ? yearFilter.value : null;
+        // A single selected year enables "vs prior year" comparisons
+        const v = yearFilter ? String(yearFilter.value || '') : '';
+        return v && !v.includes(',') ? v : null;
     }
 
     function priorSuffix() {
@@ -798,8 +945,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const sub = document.getElementById('cmp-subtitle');
         if (sub) {
             sub.textContent = `${metricLabel} by ${granLabel.toLowerCase()}, compared across ${data.dimension === 'total' ? 'all sales' : data.dimension_label.toLowerCase()}`
-                + (data.granularity === 'year' && yearLabel() ? ' · year filter ignored so every year can be compared' : '')
-                + (data.year_filter_applied ? ` · ${yearLabel()} only` : '');
+                + (yearFilter && yearFilter.value ? ` · ${String(yearFilter.value).split(',').join(', ')} only` : ' · all years');
         }
 
         renderChart(
@@ -807,7 +953,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             data.periods.length > 16 ? 'line' : 'bar',
             data.periods,
             data.series.map(s => ({ label: s.name, data: s.data })),
-            { money: isMoney, valueLabels: data.periods.length <= 8, xTitle: granLabel, yTitle: `${metricLabel}${isMoney ? ` (${activeCurrency.currency_code})` : ''}` }
+            { money: isMoney, valueLabels: data.periods.length * data.series.length <= 16, xTitle: granLabel, yTitle: `${metricLabel}${isMoney ? ` (${activeCurrency.currency_code})` : ''}` }
         );
 
         // YoY overlay (same quarter / month across years)
@@ -904,8 +1050,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const sub = document.getElementById('rev-cmp-subtitle');
         if (sub) {
-            sub.textContent = `Net revenue, COGS and gross profit by ${granLabel.toLowerCase()} with margin % on the right axis`
-                + (data.granularity === 'year' && yearLabel() ? ' · year filter ignored so every year can be compared' : '');
+            sub.textContent = `Net revenue, COGS and gross profit by ${granLabel.toLowerCase()} with margin % (dashed) on the right axis`
+                + (yearFilter && yearFilter.value ? ` · ${String(yearFilter.value).split(',').join(', ')} only` : ' · all years');
         }
 
         renderChart(
@@ -1050,22 +1196,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (marginEl) marginEl.textContent = formatPct(fSum.gross_margin_pct);
                 setMoneyEl('kpi-avg-order', avgOrder);
 
-                // YoY deltas (only meaningful when a single year is selected)
+                // YoY deltas: exactly one year selected; partial years compare the same months (like-for-like)
+                const prior = overview.prior_year;
                 const curr = selectedYear ? yearly.find(y => String(y.year) === String(selectedYear)) : null;
-                const prev = selectedYear ? yearly.find(y => Number(y.year) === Number(selectedYear) - 1) : null;
-                const hint = selectedYear ? '' : '<span class="delta-badge delta-flat">Select a year to compare</span>';
-                const sfx = priorSuffix();
-                const salesDelta = curr && curr.partial_year && curr.revenue_lfl_pct !== null
-                    ? `<span title="${escapeHtml(curr.lfl_label)}">${deltaBadge(curr.revenue_lfl_pct, { suffix: `${sfx} LFL` })}</span>`
-                    : deltaBadge(curr && prev ? pctChange(curr.net_revenue, prev.net_revenue) : null, { suffix: sfx });
-                setHtml('kpi-sales-delta', curr && prev ? salesDelta : hint);
-                setHtml('kpi-cust-delta', curr && prev ? deltaBadge(pctChange(curr.customers, prev.customers), { suffix: curr.partial_year ? `${sfx} · ${curr.active_months} mo only` : sfx }) : hint);
-                setHtml('kpi-aov-delta', curr && prev ? deltaBadge(pctChange(curr.net_revenue / curr.total_orders, prev.net_revenue / prev.total_orders), { suffix: sfx }) : hint);
-                if (curr && prev) {
-                    const pp = curr.margin_pct - prev.margin_pct;
+                const hint = selectedYear ? '<span class="delta-badge delta-flat">No prior-year data</span>' : '<span class="delta-badge delta-flat">Select one year to compare</span>';
+                const sfx = prior?.comparison_label || priorSuffix();
+                if (prior) {
+                    setHtml('kpi-sales-delta', deltaBadge(pctChange(sKpi.total_sales_amount, prior.total_sales_amount), { suffix: sfx }));
+                    setHtml('kpi-cust-delta', curr ? deltaBadge(pctChange(curr.customers, prior.customers), { suffix: sfx }) : hint);
+                    setHtml('kpi-aov-delta', deltaBadge(pctChange(avgOrder, prior.avg_order_value), { suffix: sfx }));
+                    const pp = Number(fSum.gross_margin_pct || 0) - Number(prior.gross_margin_pct || 0);
                     setHtml('kpi-margin-delta', `<span class="delta-badge ${Math.abs(pp) < 0.05 ? 'delta-flat' : (pp > 0 ? 'delta-up' : 'delta-down')}">${pp > 0 ? '▲' : (pp < 0 ? '▼' : '■')} ${Math.abs(pp).toFixed(1)} pp <span class="delta-suffix">${sfx}</span></span>`);
                 } else {
-                    setHtml('kpi-margin-delta', hint);
+                    ['kpi-sales-delta', 'kpi-cust-delta', 'kpi-aov-delta', 'kpi-margin-delta'].forEach(id => setHtml(id, hint));
                 }
 
                 const trends = sales.sales_trends || [];
@@ -1129,7 +1272,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (unitEl) unitEl.textContent = formatCount(k.total_units_sold);
                 setMoneyEl('sales-kpi-avg-line', k.avg_line_value);
                 const sfx = prior?.comparison_label || priorSuffix();
-                const noCmp = yearLabel() ? (getSelectedStaffIds().length ? '<span class="delta-badge delta-flat">Staff filter active</span>' : '<span class="delta-badge delta-flat">No prior-year data</span>') : '<span class="delta-badge delta-flat">Select a year to compare</span>';
+                const noCmp = yearLabel() ? (getSelectedStaffIds().length ? '<span class="delta-badge delta-flat">Staff filter active</span>' : '<span class="delta-badge delta-flat">No prior-year data</span>') : '<span class="delta-badge delta-flat">Select one year to compare</span>';
                 setHtml('sales-kpi-revenue-delta', prior ? deltaBadge(pctChange(k.total_sales_amount, prior.total_sales_amount), { suffix: sfx }) : noCmp);
                 setHtml('sales-kpi-orders-delta', prior ? deltaBadge(pctChange(k.total_orders, prior.total_orders), { suffix: sfx }) : noCmp);
                 setHtml('sales-kpi-units-delta', prior ? deltaBadge(pctChange(k.total_units_sold, prior.total_units_sold), { suffix: sfx }) : noCmp);
@@ -1163,11 +1306,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const totalCatSales = cats.reduce((acc, c) => acc + Number(c.sales_amount || 0), 0);
                 const tileGrid = document.getElementById('category-tile-grid');
                 if (tileGrid) {
-                    const pal = palettes[savedPalette] || palettes.Azure;
-                    tileGrid.innerHTML = cats.map((c, idx) => {
+                    tileGrid.innerHTML = cats.map((c) => {
                         const share = totalCatSales ? ((c.sales_amount / totalCatSales) * 100).toFixed(1) : '0.0';
-                        const bg = pal.colors[idx % pal.colors.length];
-                        const textClass = bg.toUpperCase() === '#AED5F5' ? 'text-dark' : 'text-white';
+                        const bg = colorFor('salesCategoryChart:cat', c.category_name);
+                        const textClass = textOn(bg);
                         return `
                             <div class="col-6">
                                 <div class="p-4 ${textClass} rounded shadow-sm territory-tile" style="background-color: ${bg};"
@@ -1186,7 +1328,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     'bar',
                     cats.map(c => c.category_name),
                     [{ label: `Category Revenue (${activeCurrency.currency_code})`, data: cats.map(c => Number(c.sales_amount || 0)) }],
-                    { valueLabels: true, xTitle: 'Product Category', yTitle: `Revenue (${activeCurrency.currency_code})` }
+                    { valueLabels: true, colorByCategory: true, xTitle: 'Product Category', yTitle: `Revenue (${activeCurrency.currency_code})` }
                 );
 
                 const productRow = (p, idx, strong) => `
@@ -1208,6 +1350,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const segs = cust.segments || [];
                 const freqs = cust.frequency_distribution || [];
                 const vips = cust.high_value_customers || [];
+                setHtml('cust-top-n', String(cust.top_limit || vips.length));
                 const totalSpend = segs.reduce((a, s) => a + Number(s.total_spend || 0), 0);
                 const totalCust = segs.reduce((a, s) => a + Number(s.customer_count || 0), 0);
 
@@ -1242,7 +1385,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     'doughnut',
                     segs.map(s => s.customer_segment),
                     [{ label: `Total Spend (${activeCurrency.currency_code})`, data: segs.map(s => Number(s.total_spend || 0)) }],
-                    { valueLabels: true, xTitle: 'Segment', yTitle: `Total Spend (${activeCurrency.currency_code})` }
+                    { valueLabels: true, sliceValues: true, legendValues: true, centerLabel: { title: 'Total Spend', value: formatMoney(totalSpend) }, xTitle: 'Segment', yTitle: `Total Spend (${activeCurrency.currency_code})` }
                 );
 
                 const tierOrder = ['1 Order (One-Time)', '2-4 Orders (Repeat)', '5-9 Orders (Loyal)', '10+ Orders (VIP)'];
@@ -1307,7 +1450,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (gmEl) gmEl.textContent = `${formatPct(s.gross_margin_pct)} Gross Margin`;
 
                 const sfx = prior?.comparison_label || priorSuffix();
-                const hint = yearLabel() ? '<span class="delta-badge delta-flat">No prior-year data</span>' : '<span class="delta-badge delta-flat">Select a year to compare</span>';
+                const hint = yearLabel() ? '<span class="delta-badge delta-flat">No prior-year data</span>' : '<span class="delta-badge delta-flat">Select one year to compare</span>';
                 setHtml('rev-gross-delta', prior ? deltaBadge(pctChange(s.gross_revenue_before_discount, prior.gross_revenue_before_discount), { suffix: sfx }) : hint);
                 setHtml('rev-discount-delta', prior ? deltaBadge(pctChange(s.discount_erosion, prior.discount_erosion), { suffix: sfx, invert: true }) : hint);
                 setHtml('rev-net-delta', prior ? deltaBadge(pctChange(s.net_product_revenue, prior.total_sales_amount), { suffix: sfx }) : hint);
@@ -1369,9 +1512,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     catBody.innerHTML = catCosts.map(c => `
                         <tr>
                             <td class="fw-semibold">${c.category_name}</td>
-                            <td class="money-val">${formatMoney(c.total_cogs)}</td>
-                            <td class="money-val">${formatMoney(c.total_revenue)}</td>
-                            <td><span class="badge ${c.cost_to_revenue_ratio_pct > 65 ? 'bg-warning text-dark' : 'bg-primary'}">${formatPct(c.cost_to_revenue_ratio_pct)}</span></td>
+                            <td class="text-end money-val">${formatMoney(c.total_cogs)}</td>
+                            <td class="text-end money-val">${formatMoney(c.total_revenue)}</td>
+                            <td class="text-end"><span class="badge ${c.cost_to_revenue_ratio_pct > 65 ? 'bg-warning text-dark' : 'bg-primary'}">${formatPct(c.cost_to_revenue_ratio_pct)}</span></td>
                         </tr>
                     `).join('');
                 }
@@ -1382,9 +1525,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <tr>
                             <td>${idx + 1}</td>
                             <td class="fw-semibold">${p.product_name}</td>
-                            <td class="money-val">${formatMoney(p.unit_standard_cost)}</td>
-                            <td>${formatCount(p.units_sold)}</td>
-                            <td class="money-val fw-bold">${formatMoney(p.cumulative_cogs)}</td>
+                            <td class="text-end money-val">${formatMoney(p.unit_standard_cost)}</td>
+                            <td class="text-end">${formatCount(p.units_sold)}</td>
+                            <td class="text-end money-val fw-bold">${formatMoney(p.cumulative_cogs)}</td>
                         </tr>
                     `).join('');
                 }
@@ -1889,12 +2032,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (custSearch) custSearch.addEventListener('input', filterVipTable);
     if (custSegFilter) custSegFilter.addEventListener('change', loadPageData);
+    document.getElementById('cust-limit')?.addEventListener('change', loadPageData);
 
+    await initFilters();
     [yearFilter, categoryFilter].forEach(el => {
         if (el) el.addEventListener('change', loadPageData);
     });
-
-    await initFilters();
     await loadPageData();
 });
 
@@ -1915,8 +2058,7 @@ function showCategoryDetail(name, sales, share, units) {
     document.getElementById('modalTitle').textContent = `${name} — Category Performance`;
     document.getElementById('modalBody').innerHTML = `
         <p><strong>Total Category Revenue:</strong> ${sales} (${share} of filtered sales)</p>
-        <p class="mb-0"><strong>Total Units Sold:</strong> ${units} units<br>
-        <strong>Source Tables:</strong> Sales.SalesOrderDetail, Production.ProductCategory</p>
+        <p class="mb-0"><strong>Total Units Sold:</strong> ${units} units</p>
     `;
 }
 
