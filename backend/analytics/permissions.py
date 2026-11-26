@@ -9,6 +9,7 @@ ROLE_PERMISSIONS = {
         "can_view_customers": True,
         "can_view_revenue_loss": True,
         "can_view_cost": True,
+        "can_view_rbac": True,
         "can_view_audit": True,
         "can_edit_settings": True,
         "can_view_profile": True,
@@ -23,6 +24,7 @@ ROLE_PERMISSIONS = {
         "can_view_customers": True,
         "can_view_revenue_loss": True,
         "can_view_cost": True,
+        "can_view_rbac": False,
         "can_view_audit": True,
         "can_edit_settings": False,
         "can_view_profile": True,
@@ -37,6 +39,7 @@ ROLE_PERMISSIONS = {
         "can_view_customers": True,
         "can_view_revenue_loss": False,
         "can_view_cost": False,
+        "can_view_rbac": False,
         "can_view_audit": False,
         "can_edit_settings": False,
         "can_view_profile": True,
@@ -51,10 +54,11 @@ ROLE_PERMISSIONS = {
         "can_view_customers": False,
         "can_view_revenue_loss": False,
         "can_view_cost": False,
+        "can_view_rbac": False,
         "can_view_audit": False,
         "can_edit_settings": False,
         "can_view_profile": True,
-        "can_export": False,
+        "can_export": True,
         "can_edit_reports": False,
         "can_delete_reports": False,
     },
@@ -65,10 +69,11 @@ ROLE_PERMISSIONS = {
         "can_view_customers": True,
         "can_view_revenue_loss": False,
         "can_view_cost": False,
+        "can_view_rbac": False,
         "can_view_audit": False,
         "can_edit_settings": False,
         "can_view_profile": True,
-        "can_export": False,
+        "can_export": True,
         "can_edit_reports": False,
         "can_delete_reports": False,
     },
@@ -79,10 +84,11 @@ ROLE_PERMISSIONS = {
         "can_view_customers": False,
         "can_view_revenue_loss": True,
         "can_view_cost": False,
+        "can_view_rbac": False,
         "can_view_audit": False,
         "can_edit_settings": False,
         "can_view_profile": True,
-        "can_export": False,
+        "can_export": True,
         "can_edit_reports": False,
         "can_delete_reports": False,
     },
@@ -93,20 +99,23 @@ ROLE_PERMISSIONS = {
         "can_view_customers": False,
         "can_view_revenue_loss": False,
         "can_view_cost": True,
+        "can_view_rbac": False,
         "can_view_audit": False,
         "can_edit_settings": False,
         "can_view_profile": True,
-        "can_export": False,
+        "can_export": True,
         "can_edit_reports": False,
         "can_delete_reports": False,
     },
 }
+
 
 def get_user_role(user):
     if user.is_superuser:
         return "ADMINISTRATOR"
     grp = user.groups.first()
     return grp.name.upper() if grp else "SALES_ANALYST"
+
 
 def require_permission(perm_key):
     def decorator(view_func):
@@ -116,7 +125,12 @@ def require_permission(perm_key):
                 return JsonResponse({"error": "Authentication required"}, status=401)
             role = get_user_role(request.user)
             if not ROLE_PERMISSIONS.get(role, {}).get(perm_key, False):
-                return JsonResponse({"error": f"HTTP 403: {role} is denied access ({perm_key})"}, status=403)
+                return JsonResponse(
+                    {"error": f"HTTP 403: {role} is denied access ({perm_key})"},
+                    status=403,
+                )
             return view_func(request, *args, **kwargs)
+
         return _wrapped
+
     return decorator

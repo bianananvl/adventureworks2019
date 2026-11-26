@@ -11,6 +11,7 @@ urlpatterns = [
     path("customer_profile.html", TemplateView.as_view(template_name="customer_profile.html")),
     path("revenue_loss.html", TemplateView.as_view(template_name="revenue_loss.html")),
     path("cost_analysis.html", TemplateView.as_view(template_name="cost_analysis.html")),
+    path("rbac.html", TemplateView.as_view(template_name="rbac.html")),
     path("audit_logs.html", TemplateView.as_view(template_name="audit_logs.html")),
     path("settings.html", TemplateView.as_view(template_name="settings.html")),
     path("profile.html", TemplateView.as_view(template_name="profile.html")),

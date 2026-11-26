@@ -4,15 +4,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 1. Saved Preferences & Theme
     const savedTheme = localStorage.getItem('aw_theme') || 'light';
-    let savedCurrency = localStorage.getItem('aw_currency') || 'USD';
     let savedPalette = localStorage.getItem('aw_palette') || 'Azure';
     const savedWidescreen = localStorage.getItem('aw_widescreen') === 'true';
+
+    // Active backend currency configuration (already applied by backend SQL queries)
+    let activeCurrency = {
+        currency_code: 'USD',
+        currency_symbol: '$',
+        currency_multiplier: 1.0
+    };
 
     const palettes = {
         Azure: {
             primary: '#367ADF',
             fill: 'rgba(54, 122, 223, 0.18)',
-            colors: ['#367ADF', '#4FACE5', '#394988', '#AED5F5', '#353A4C']
+            colors: ['#367ADF', '#4FACE5', '#394988', '#AED5F5', '#353A4C', '#1D4ED8', '#0284C7']
         },
         Ocean: { primary: '#0d9488', fill: 'rgba(13, 148, 136, 0.15)', colors: ['#0d9488', '#0284c7', '#38bdf8', '#2dd4bf', '#0f766e'] },
         Sunset: { primary: '#f97316', fill: 'rgba(249, 115, 22, 0.15)', colors: ['#f97316', '#ef4444', '#f59e0b', '#ec4899', '#d97706'] },
@@ -20,20 +26,28 @@ document.addEventListener('DOMContentLoaded', async () => {
         Mono: { primary: '#475569', fill: 'rgba(71, 85, 105, 0.15)', colors: ['#334155', '#64748b', '#94a3b8', '#475569', '#1e293b'] }
     };
 
-    const rates = {
-        USD: { rate: 1, symbol: '$' },
-        PHP: { rate: 58.2, symbol: '₱' },
-        EUR: { rate: 0.92, symbol: '€' },
-        JPY: { rate: 154.5, symbol: '¥' }
+    const presetRates = {
+        USD: { code: 'USD', symbol: '$', multiplier: 1.0 },
+        PHP: { code: 'PHP', symbol: '₱', multiplier: 58.2 },
+        EUR: { code: 'EUR', symbol: '€', multiplier: 0.92 },
+        JPY: { code: 'JPY', symbol: '¥', multiplier: 154.5 }
     };
 
     applyTheme(savedTheme);
     applyPaletteToUI(savedPalette);
     if (savedWidescreen) document.body.classList.add('widescreen-mode');
 
+    const activeSession = JSON.parse(localStorage.getItem('aw_session') || '{}');
+    const sessionRole = (activeSession.role || '').toUpperCase();
+    const currentPageKey = document.body.getAttribute('data-page') || '';
+
     // Sync Settings Page Controls
     const setThemeEl = document.getElementById('set-theme');
     const setCurrencyEl = document.getElementById('set-currency');
+    const setCurrencyCodeEl = document.getElementById('set-currency-code');
+    const setCurrencySymbolEl = document.getElementById('set-currency-symbol');
+    const setCurrencyMultEl = document.getElementById('set-currency-multiplier');
+    const btnSaveCurrency = document.getElementById('btn-save-currency');
     const setPaletteEl = document.getElementById('set-palette');
     const setWidescreenEl = document.getElementById('set-widescreen');
     const setChartTypeEl = document.getElementById('set-chart-type');
@@ -43,14 +57,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         setThemeEl.addEventListener('change', (e) => {
             localStorage.setItem('aw_theme', e.target.value);
             applyTheme(e.target.value);
-        });
-    }
-    if (setCurrencyEl) {
-        setCurrencyEl.value = savedCurrency;
-        setCurrencyEl.addEventListener('change', (e) => {
-            savedCurrency = e.target.value;
-            localStorage.setItem('aw_currency', savedCurrency);
-            convertAllCurrency(savedCurrency);
         });
     }
     if (setPaletteEl) {
@@ -75,31 +81,68 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    // Enforce RBAC Settings Controls (Only Administrator can edit system settings)
-    const activeSession = JSON.parse(localStorage.getItem('aw_session') || '{}');
-    const sessionRole = (activeSession.role || '').toUpperCase();
+    if (setCurrencyEl) {
+        setCurrencyEl.addEventListener('change', (e) => {
+            const preset = presetRates[e.target.value];
+            if (preset && setCurrencyCodeEl && setCurrencySymbolEl && setCurrencyMultEl) {
+                setCurrencyCodeEl.value = preset.code;
+                setCurrencySymbolEl.value = preset.symbol;
+                setCurrencyMultEl.value = preset.multiplier;
+            }
+        });
+    }
 
+    if (btnSaveCurrency) {
+        btnSaveCurrency.addEventListener('click', async () => {
+            const feedback = document.getElementById('settings-feedback');
+            try {
+                const res = await fetch('/api/settings/', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        currency_code: setCurrencyCodeEl?.value || 'USD',
+                        currency_symbol: setCurrencySymbolEl?.value || '$',
+                        currency_multiplier: setCurrencyMultEl?.value || 1.0
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to save settings');
+                activeCurrency = data;
+                if (feedback) {
+                    feedback.className = 'alert alert-success py-2 small mb-3';
+                    feedback.textContent = `Saved global currency: ${data.currency_code} (${data.currency_symbol}) × ${data.currency_multiplier}. All reports will now display scaled figures.`;
+                    feedback.classList.remove('d-none');
+                }
+            } catch (err) {
+                if (feedback) {
+                    feedback.className = 'alert alert-danger py-2 small mb-3';
+                    feedback.textContent = err.message;
+                    feedback.classList.remove('d-none');
+                }
+            }
+        });
+    }
+
+    // Enforce RBAC Settings Controls (Only Administrator can edit system settings)
     if (sessionRole !== 'ADMINISTRATOR') {
-        [setThemeEl, setCurrencyEl, setPaletteEl, setWidescreenEl, setChartTypeEl].forEach(el => {
+        [setThemeEl, setCurrencyEl, setCurrencyCodeEl, setCurrencySymbolEl, setCurrencyMultEl, btnSaveCurrency, setPaletteEl, setWidescreenEl, setChartTypeEl].forEach(el => {
             if (el) el.disabled = true;
         });
-        const settingsContainer = document.querySelector('[data-page="settings"] .container, [data-page="settings"] .container-fluid, [data-page="audit"] .container-fluid');
+        const settingsContainer = document.querySelector('[data-page="settings"] .container, [data-page="settings"] .container-fluid');
         if (settingsContainer) {
             const notice = document.createElement('div');
             notice.className = 'alert alert-warning py-2 small mb-3';
-            notice.innerHTML = sessionRole === 'MANAGER'
-                ? '<strong>Executive Management (Read-Only Access):</strong> You have full visibility into Governance, Audit Logs, and System Settings, but administrative RBAC and configuration edits are restricted to System Administrators.'
-                : '<strong>Read-Only Configuration:</strong> System-wide configuration and RBAC governance are managed by System Administrators.';
+            notice.innerHTML = '<strong>Read-Only Configuration:</strong> Global currency multipliers and system-wide configuration are managed exclusively by System Administrators.';
             settingsContainer.prepend(notice);
         }
     }
 
     // Build & Enforce RBAC Export Controls (CSV & PDF) on Reporting Modules
     const exportEligiblePages = ['executive', 'sales', 'customers', 'revenue_loss', 'cost'];
-    const currentPageKey = document.body.getAttribute('data-page') || '';
-    const isExportAllowed = ['ADMINISTRATOR', 'MANAGER', 'SUPERVISOR'].includes(sessionRole);
+    const isBulkExportAllowed = ['ADMINISTRATOR', 'MANAGER', 'SUPERVISOR'].includes(sessionRole);
 
-    if (exportEligiblePages.includes(currentPageKey) && isExportAllowed) {
+    if (exportEligiblePages.includes(currentPageKey) && isBulkExportAllowed) {
         const pageHeader = document.querySelector('.container-fluid h2, .container-fluid h3');
         if (pageHeader && !document.getElementById('rbac-export-toolbar')) {
             const headerRow = document.createElement('div');
@@ -140,31 +183,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 link.download = `JBABEWorks_${currentPageKey}_${new Date().toISOString().slice(0, 10)}.csv`;
                 link.click();
                 URL.revokeObjectURL(url);
-
-                const logs = JSON.parse(localStorage.getItem('aw_audit_logs') || '[]');
-                logs.unshift({
-                    timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),
-                    user: activeSession.user || 'User',
-                    role: activeSession.role_display || sessionRole,
-                    action: `Exported CSV Report (${currentPageKey})`,
-                    module: pageHeader.innerText.trim(),
-                    status: 'SUCCESS'
-                });
-                localStorage.setItem('aw_audit_logs', JSON.stringify(logs));
             });
 
             document.getElementById('btn-export-pdf').addEventListener('click', async () => {
-                const logs = JSON.parse(localStorage.getItem('aw_audit_logs') || '[]');
-                logs.unshift({
-                    timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),
-                    user: activeSession.user || 'User',
-                    role: activeSession.role_display || sessionRole,
-                    action: `Exported PDF Report (${currentPageKey})`,
-                    module: pageHeader.innerText.trim(),
-                    status: 'SUCCESS'
-                });
-                localStorage.setItem('aw_audit_logs', JSON.stringify(logs));
-
                 const loadScript = (src) => new Promise((resolve, reject) => {
                     const s = document.createElement('script');
                     s.src = src;
@@ -241,42 +262,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.addEventListener('storage', (e) => {
         if (e.key === 'aw_theme') applyTheme(e.newValue);
         if (e.key === 'aw_palette') { savedPalette = e.newValue; applyPaletteToUI(savedPalette); }
-        if (e.key === 'aw_currency') { savedCurrency = e.newValue; convertAllCurrency(savedCurrency); }
     });
 
-    const currencyDropdown = document.getElementById('global-currency');
-    if (currencyDropdown) {
-        currencyDropdown.value = savedCurrency;
-        currencyDropdown.addEventListener('change', (e) => {
-            savedCurrency = e.target.value;
-            localStorage.setItem('aw_currency', savedCurrency);
-            convertAllCurrency(savedCurrency);
-        });
-    }
-
-    function formatMoney(usdAmount, curr = savedCurrency) {
-        const { rate, symbol } = rates[curr] || rates.USD;
-        const val = Number(usdAmount || 0) * rate;
+    // Backend already multiplies monetary values by SystemSettings.currency_multiplier
+    function formatMoney(scaledAmount) {
+        const symbol = activeCurrency.currency_symbol || '$';
+        const code = activeCurrency.currency_code || 'USD';
+        const val = Number(scaledAmount || 0);
         if (Math.abs(val) >= 1000000) return `${symbol}${(val / 1000000).toFixed(2)}M`;
         if (Math.abs(val) >= 100000) return `${symbol}${(val / 1000).toFixed(1)}K`;
         return `${symbol}${val.toLocaleString('en-US', {
-            minimumFractionDigits: curr === 'JPY' ? 0 : 2,
-            maximumFractionDigits: curr === 'JPY' ? 0 : 2
+            minimumFractionDigits: code === 'JPY' ? 0 : 2,
+            maximumFractionDigits: code === 'JPY' ? 0 : 2
         })}`;
     }
 
-    function convertAllCurrency(curr = savedCurrency) {
-        document.querySelectorAll('.money-val').forEach(el => {
-            const baseUsd = parseFloat(el.getAttribute('data-usd'));
-            if (!isNaN(baseUsd)) el.textContent = formatMoney(baseUsd, curr);
-        });
-    }
-
-    function setMoneyEl(id, usdAmount) {
+    function setMoneyEl(id, scaledAmount) {
         const el = document.getElementById(id);
         if (!el) return;
-        el.setAttribute('data-usd', Number(usdAmount || 0));
-        el.textContent = formatMoney(usdAmount, savedCurrency);
+        el.textContent = formatMoney(scaledAmount);
+    }
+
+    function updateCurrencyBadge(currencyObj) {
+        if (currencyObj) activeCurrency = currencyObj;
+        const badge = document.getElementById('active-currency-badge');
+        if (badge) {
+            badge.textContent = `Currency: ${activeCurrency.currency_code} (${activeCurrency.currency_symbol}) × ${activeCurrency.currency_multiplier}`;
+        }
     }
 
     function applyPaletteToUI(paletteName) {
@@ -289,7 +301,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             chart.data.datasets.forEach((ds, idx) => {
                 if (chart.config.type === 'line') {
                     ds.borderColor = pal.colors[idx % pal.colors.length];
-                    ds.backgroundColor = pal.fill;
+                    ds.backgroundColor = cached.datasets.length === 1 ? pal.fill : 'transparent';
                 } else {
                     ds.backgroundColor = cached.datasets.length > 1
                         ? pal.colors[idx % pal.colors.length]
@@ -316,9 +328,74 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
     }
 
+    // Export specific Chart.js canvas as PNG + log in backend SQLite AuditLog
+    async function exportSpecificChartPng(canvasId, chartTitle) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+
+        // Paint white/theme background behind transparent canvas so PNG looks crisp
+        const exportCanvas = document.createElement('canvas');
+        exportCanvas.width = canvas.width;
+        exportCanvas.height = canvas.height;
+        const ctx = exportCanvas.getContext('2d');
+        ctx.fillStyle = document.body.classList.contains('dark-mode') ? '#1e293b' : '#ffffff';
+        ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+        ctx.drawImage(canvas, 0, 0);
+
+        const slug = (chartTitle || canvasId).toLowerCase().replace(/[^a-z0-9]+/g, '_');
+        const link = document.createElement('a');
+        link.download = `JBABEWorks_${slug}_${new Date().toISOString().slice(0, 10)}.png`;
+        link.href = exportCanvas.toDataURL('image/png');
+        link.click();
+
+        try {
+            await fetch('/api/audit/log-export/', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chart_name: chartTitle || canvasId,
+                    module: currentPageKey || 'Dashboard'
+                })
+            });
+        } catch (err) {}
+    }
+
+    function attachChartExportButton(canvas, canvasId) {
+        const card = canvas.closest('.card');
+        if (!card || card.querySelector(`.btn-export-png[data-canvas="${canvasId}"]`)) return;
+
+        const heading = card.querySelector('h5');
+        const chartTitle = heading ? heading.textContent.trim() : canvasId;
+        const switcher = card.querySelector(`.chart-type-switcher[data-target="${canvasId}"]`);
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-sm btn-outline-secondary btn-export-png ms-2';
+        btn.setAttribute('data-canvas', canvasId);
+        btn.textContent = 'Export PNG';
+        btn.addEventListener('click', () => exportSpecificChartPng(canvasId, chartTitle));
+
+        if (switcher && switcher.parentNode) {
+            const group = document.createElement('div');
+            group.className = 'd-flex align-items-center';
+            switcher.parentNode.insertBefore(group, switcher);
+            group.appendChild(switcher);
+            group.appendChild(btn);
+        } else if (heading) {
+            const row = document.createElement('div');
+            row.className = 'd-flex justify-content-between align-items-center mb-2';
+            heading.parentNode.insertBefore(row, heading);
+            row.appendChild(heading);
+            row.appendChild(btn);
+        }
+    }
+
     function renderChart(canvasId, defaultType, labels, datasets) {
         const canvas = document.getElementById(canvasId);
         if (!canvas) return;
+
+        attachChartExportButton(canvas, canvasId);
 
         const switcher = document.querySelector(`.chart-type-switcher[data-target="${canvasId}"]`);
         const type = (switcher && switcher.value) ? switcher.value : defaultType;
@@ -329,7 +406,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             ...ds,
             borderColor: type === 'line' ? pal.colors[idx % pal.colors.length] : undefined,
             backgroundColor: type === 'line'
-                ? pal.fill
+                ? (datasets.length === 1 ? pal.fill : 'transparent')
                 : (datasets.length > 1 ? pal.colors[idx % pal.colors.length] : pal.colors),
             fill: type === 'line' && datasets.length === 1,
             tension: 0.35
@@ -352,20 +429,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (cached) renderChart(targetId, e.target.value, cached.labels, cached.datasets);
         });
     });
-
-    function logAuditEvent(action, moduleName, status = 'SUCCESS') {
-        const userSession = JSON.parse(localStorage.getItem('aw_session') || '{}');
-        const logs = JSON.parse(localStorage.getItem('aw_audit_logs') || '[]');
-        logs.unshift({
-            timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),
-            user: userSession.user || 'admin',
-            role: userSession.role_display || 'Administrator',
-            action,
-            module: moduleName,
-            status
-        });
-        localStorage.setItem('aw_audit_logs', JSON.stringify(logs.slice(0, 100)));
-    }
 
     async function apiGet(url) {
         const res = await fetch(url, { credentials: 'same-origin' });
@@ -399,13 +462,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 2. Populate Live Filters from AdventureWorks2019 (/api/filters/)
     const yearFilter = document.getElementById('global-year');
     const categoryFilter = document.getElementById('global-category');
+    const staffCheckboxList = document.getElementById('staff-checkbox-list');
+    const staffDropdownBtn = document.getElementById('staffDropdownBtn');
     const custSearch = document.getElementById('cust-search');
     const custSegFilter = document.getElementById('cust-segment');
 
+    function getSelectedStaffIds() {
+        if (!staffCheckboxList) return [];
+        return Array.from(staffCheckboxList.querySelectorAll('input.staff-checkbox:checked'))
+            .map(cb => cb.value);
+    }
+
+    function updateStaffDropdownLabel() {
+        if (!staffDropdownBtn) return;
+        const checked = Array.from(staffCheckboxList?.querySelectorAll('input.staff-checkbox:checked') || []);
+        if (checked.length === 0) {
+            staffDropdownBtn.textContent = 'All Sales Staff';
+        } else if (checked.length === 1) {
+            staffDropdownBtn.textContent = checked[0].getAttribute('data-name');
+        } else {
+            staffDropdownBtn.textContent = `${checked.length} Staff Selected (Comparing)`;
+        }
+    }
+
     async function initFilters() {
-        if (!yearFilter && !categoryFilter) return;
+        if (!yearFilter && !categoryFilter && !staffCheckboxList) return;
         try {
             const meta = await apiGet('/api/filters/');
+            if (meta.currency) updateCurrencyBadge(meta.currency);
+
             if (yearFilter && Array.isArray(meta.available_years)) {
                 yearFilter.innerHTML = '<option value="">All Years (2011–2014)</option>' +
                     meta.available_years.map(y => `<option value="${y}">${y}</option>`).join('');
@@ -420,6 +505,35 @@ document.addEventListener('DOMContentLoaded', async () => {
                     categoryFilter.disabled = true;
                 }
             }
+            if (staffCheckboxList && Array.isArray(meta.sales_staff)) {
+                staffCheckboxList.innerHTML = `
+                    <div class="d-flex justify-content-between px-2 pb-1 mb-1 border-bottom">
+                        <small class="fw-bold text-muted">Select 2+ to compare</small>
+                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="btn-clear-staff">Clear</button>
+                    </div>
+                ` + meta.sales_staff.map(s => `
+                    <div class="form-check mx-2 my-1">
+                        <input class="form-check-input staff-checkbox" type="checkbox" value="${s.staff_id}" data-name="${s.staff_name}" id="staff-cb-${s.staff_id}">
+                        <label class="form-check-label small" for="staff-cb-${s.staff_id}">${s.staff_name}</label>
+                    </div>
+                `).join('');
+
+                staffCheckboxList.querySelectorAll('input.staff-checkbox').forEach(cb => {
+                    cb.addEventListener('change', () => {
+                        updateStaffDropdownLabel();
+                        loadPageData();
+                    });
+                });
+
+                const clearBtn = document.getElementById('btn-clear-staff');
+                if (clearBtn) {
+                    clearBtn.addEventListener('click', () => {
+                        staffCheckboxList.querySelectorAll('input.staff-checkbox').forEach(cb => { cb.checked = false; });
+                        updateStaffDropdownLabel();
+                        loadPageData();
+                    });
+                }
+            }
         } catch (err) {
             showPageError(`Filter load error: ${err.message}`);
         }
@@ -431,6 +545,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (categoryFilter && categoryFilter.value) params.set('category_id', categoryFilter.value);
         if (custSegFilter && custSegFilter.value && custSegFilter.value !== 'All') {
             params.set('segment', custSegFilter.value);
+        }
+        const staffIds = getSelectedStaffIds();
+        if (staffIds.length > 0) {
+            params.set('staff_ids', staffIds.join(','));
         }
         const qs = params.toString();
         return qs ? `?${qs}` : '';
@@ -457,6 +575,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     apiGet(`/api/reports/sales/${qs}`),
                     apiGet(`/api/reports/revenue-loss/${qs}`)
                 ]);
+                if (sales.currency) updateCurrencyBadge(sales.currency);
 
                 const sKpi = sales.kpis || {};
                 const fSum = revLoss.financial_summary || {};
@@ -481,7 +600,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     'execTrendChart',
                     'line',
                     trends.map(t => t.period),
-                    [{ label: 'Net Sales (USD)', data: trends.map(t => Number(t.sales_amount || 0)) }]
+                    [{ label: `Net Sales (${activeCurrency.currency_code})`, data: trends.map(t => Number(t.sales_amount || 0)) }]
                 );
 
                 const cats = sales.sales_by_category || [];
@@ -489,15 +608,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                     'execCategoryChart',
                     'doughnut',
                     cats.map(c => c.category_name),
-                    [{ label: 'Category Sales (USD)', data: cats.map(c => Number(c.sales_amount || 0)) }]
+                    [{ label: `Category Sales (${activeCurrency.currency_code})`, data: cats.map(c => Number(c.sales_amount || 0)) }]
                 );
 
                 await loadSavedConfigs();
-                logAuditEvent(`Loaded Executive Central ${qs || '(All Data)'}`, 'Executive Central');
             }
 
             if (pageType === 'sales') {
                 const sales = await apiGet(`/api/reports/sales/${qs}`);
+                if (sales.currency) updateCurrencyBadge(sales.currency);
+
                 const k = sales.kpis || {};
                 setMoneyEl('sales-kpi-revenue', k.total_sales_amount);
                 const ordEl = document.getElementById('sales-kpi-orders');
@@ -505,6 +625,29 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const unitEl = document.getElementById('sales-kpi-units');
                 if (unitEl) unitEl.textContent = Number(k.total_units_sold || 0).toLocaleString();
                 setMoneyEl('sales-kpi-avg-line', k.avg_line_value);
+
+                // Multi-Staff Year-over-Year Comparison Chart
+                const compRows = sales.staff_comparison || [];
+                const selectedIds = getSelectedStaffIds();
+                const compSub = document.getElementById('staff-comp-subtitle');
+                if (compSub) {
+                    compSub.textContent = selectedIds.length >= 2
+                        ? `Comparing ${selectedIds.length} selected sales staff across all recorded years (${activeCurrency.currency_code}).`
+                        : selectedIds.length === 1
+                            ? 'Showing yearly performance for 1 selected staff member. Check 1+ more to compare side-by-side.'
+                            : 'Showing all sales staff across years. Use the Compare Sales Staff filter above to isolate 2+ staff.';
+                }
+
+                const years = Array.from(new Set(compRows.map(r => r.year))).sort((a, b) => a - b);
+                const staffNames = Array.from(new Set(compRows.map(r => r.staff_name)));
+                const staffDatasets = staffNames.map(name => ({
+                    label: name,
+                    data: years.map(yr => {
+                        const match = compRows.find(r => r.year === yr && r.staff_name === name);
+                        return match ? Number(match.sales_amount || 0) : 0;
+                    })
+                }));
+                renderChart('staffComparisonChart', 'bar', years.map(String), staffDatasets);
 
                 const cats = sales.sales_by_category || [];
                 const totalCatSales = cats.reduce((acc, c) => acc + Number(c.sales_amount || 0), 0);
@@ -521,7 +664,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                      data-bs-toggle="modal" data-bs-target="#detailModal"
                                      onclick="showCategoryDetail('${c.category_name}', '${formatMoney(c.sales_amount)}', '${share}%', ${c.units_sold})">
                                     <h5 class="fw-bold mb-1">${c.category_name}</h5>
-                                    <div class="money-val fw-semibold" data-usd="${c.sales_amount}">${formatMoney(c.sales_amount)}</div>
+                                    <div class="money-val fw-semibold">${formatMoney(c.sales_amount)}</div>
                                     <small>${share}% Share · ${Number(c.units_sold).toLocaleString()} units</small>
                                 </div>
                             </div>`;
@@ -532,14 +675,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                     'salesCategoryChart',
                     'bar',
                     cats.map(c => c.category_name),
-                    [{ label: 'Category Revenue (USD)', data: cats.map(c => Number(c.sales_amount || 0)) }]
+                    [{ label: `Category Revenue (${activeCurrency.currency_code})`, data: cats.map(c => Number(c.sales_amount || 0)) }]
                 );
 
                 renderChart(
                     'salesTrendChart',
                     'line',
                     (sales.sales_trends || []).map(t => t.period),
-                    [{ label: 'Monthly Revenue (USD)', data: (sales.sales_trends || []).map(t => Number(t.sales_amount || 0)) }]
+                    [{ label: `Monthly Revenue (${activeCurrency.currency_code})`, data: (sales.sales_trends || []).map(t => Number(t.sales_amount || 0)) }]
                 );
 
                 const topBody = document.getElementById('top-products-tbody');
@@ -550,7 +693,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             <td class="fw-semibold">${p.product_name}</td>
                             <td><code>${p.ProductNumber}</code></td>
                             <td>${Number(p.units_sold).toLocaleString()}</td>
-                            <td class="money-val fw-bold" data-usd="${p.total_sales}">${formatMoney(p.total_sales)}</td>
+                            <td class="money-val fw-bold">${formatMoney(p.total_sales)}</td>
                         </tr>
                     `).join('');
                 }
@@ -563,16 +706,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                             <td>${p.product_name}</td>
                             <td><code>${p.ProductNumber}</code></td>
                             <td>${Number(p.units_sold).toLocaleString()}</td>
-                            <td class="money-val" data-usd="${p.total_sales}">${formatMoney(p.total_sales)}</td>
+                            <td class="money-val">${formatMoney(p.total_sales)}</td>
                         </tr>
                     `).join('');
                 }
-
-                logAuditEvent(`Queried Sales Analysis ${qs || '(All Years)'}`, 'Sales Analysis');
             }
 
             if (pageType === 'customers') {
                 const cust = await apiGet(`/api/reports/customers/${qs}`);
+                if (cust.currency) updateCurrencyBadge(cust.currency);
+
                 const segs = cust.segments || [];
                 const freqs = cust.frequency_distribution || [];
                 const vips = cust.high_value_customers || [];
@@ -585,9 +728,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 <small class="text-muted">${s.customer_segment}</small>
                                 <div class="d-flex justify-content-between align-items-baseline mt-1">
                                     <h3 class="fw-bold mb-0">${Number(s.customer_count).toLocaleString()} <small class="fs-6 fw-normal text-muted">customers</small></h3>
-                                    <span class="fw-bold text-accent money-val" data-usd="${s.total_spend}">${formatMoney(s.total_spend)}</span>
+                                    <span class="fw-bold text-accent money-val">${formatMoney(s.total_spend)}</span>
                                 </div>
-                                <small class="text-muted mt-1">${Number(s.total_orders).toLocaleString()} orders · Avg Order: <span class="money-val" data-usd="${s.avg_order_value}">${formatMoney(s.avg_order_value)}</span></small>
+                                <small class="text-muted mt-1">${Number(s.total_orders).toLocaleString()} orders · Avg Order: <span class="money-val">${formatMoney(s.avg_order_value)}</span></small>
                             </div>
                         </div>
                     `).join('');
@@ -597,7 +740,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     'segmentChart',
                     'doughnut',
                     segs.map(s => s.customer_segment),
-                    [{ label: 'Total Spend (USD)', data: segs.map(s => Number(s.total_spend || 0)) }]
+                    [{ label: `Total Spend (${activeCurrency.currency_code})`, data: segs.map(s => Number(s.total_spend || 0)) }]
                 );
 
                 renderChart(
@@ -620,20 +763,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 <td><code>${c.AccountNumber}</code></td>
                                 <td><span class="badge ${badgeClass}">${c.segment}</span></td>
                                 <td>${Number(c.order_frequency).toLocaleString()}</td>
-                                <td class="money-val fw-bold" data-usd="${c.total_spend}">${formatMoney(c.total_spend)}</td>
-                                <td class="money-val" data-usd="${c.avg_order_value}">${formatMoney(c.avg_order_value)}</td>
+                                <td class="money-val fw-bold">${formatMoney(c.total_spend)}</td>
+                                <td class="money-val">${formatMoney(c.avg_order_value)}</td>
                                 <td>${lastDate}</td>
                             </tr>
                         `;
                     }).join('');
                     filterVipTable();
                 }
-
-                logAuditEvent(`Queried Customer Profile ${qs || '(All Years)'}`, 'Customer Profile');
             }
 
             if (pageType === 'revenue_loss') {
                 const rev = await apiGet(`/api/reports/revenue-loss/${qs}`);
+                if (rev.currency) updateCurrencyBadge(rev.currency);
+
                 const s = rev.financial_summary || {};
                 const leakageRate = s.gross_revenue_before_discount
                     ? ((s.discount_erosion / s.gross_revenue_before_discount) * 100).toFixed(2)
@@ -659,9 +802,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     'line',
                     trends.map(t => t.period),
                     [
-                        { label: 'Net Revenue (USD)', data: trends.map(t => Number(t.net_revenue || 0)) },
-                        { label: 'Estimated COGS (USD)', data: trends.map(t => Number(t.estimated_cogs || 0)) },
-                        { label: 'Gross Profit (USD)', data: trends.map(t => Number(t.gross_profit || 0)) }
+                        { label: `Net Revenue (${activeCurrency.currency_code})`, data: trends.map(t => Number(t.net_revenue || 0)) },
+                        { label: `Estimated COGS (${activeCurrency.currency_code})`, data: trends.map(t => Number(t.estimated_cogs || 0)) },
+                        { label: `Gross Profit (${activeCurrency.currency_code})`, data: trends.map(t => Number(t.gross_profit || 0)) }
                     ]
                 );
 
@@ -676,19 +819,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 <td class="fw-semibold">${item.product_name}</td>
                                 <td>${item.category_name}</td>
                                 <td>${Number(item.units_sold).toLocaleString()}</td>
-                                <td class="money-val" data-usd="${item.net_revenue}">${formatMoney(item.net_revenue)}</td>
-                                <td class="money-val" data-usd="${item.standard_cogs}">${formatMoney(item.standard_cogs)}</td>
-                                <td class="money-val text-danger fw-bold" data-usd="${item.net_margin_variance}">${formatMoney(item.net_margin_variance)}</td>
+                                <td class="money-val">${formatMoney(item.net_revenue)}</td>
+                                <td class="money-val">${formatMoney(item.standard_cogs)}</td>
+                                <td class="money-val text-danger fw-bold">${formatMoney(item.net_margin_variance)}</td>
                             </tr>
                         `).join('');
                     }
                 }
-
-                logAuditEvent(`Queried Revenue & Loss ${qs || '(All Data)'}`, 'Revenue & Loss');
             }
 
             if (pageType === 'cost') {
                 const cost = await apiGet(`/api/reports/cost/${qs}`);
+                if (cost.currency) updateCurrencyBadge(cost.currency);
+
                 const sc = cost.sales_side_costs || {};
                 const pc = cost.procurement_costs || {};
 
@@ -705,8 +848,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     'bar',
                     catCosts.map(c => c.category_name),
                     [
-                        { label: 'Total COGS (USD)', data: catCosts.map(c => Number(c.total_cogs || 0)) },
-                        { label: 'Total Revenue (USD)', data: catCosts.map(c => Number(c.total_revenue || 0)) }
+                        { label: `Total COGS (${activeCurrency.currency_code})`, data: catCosts.map(c => Number(c.total_cogs || 0)) },
+                        { label: `Total Revenue (${activeCurrency.currency_code})`, data: catCosts.map(c => Number(c.total_revenue || 0)) }
                     ]
                 );
 
@@ -715,8 +858,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     catBody.innerHTML = catCosts.map(c => `
                         <tr>
                             <td class="fw-semibold">${c.category_name}</td>
-                            <td class="money-val" data-usd="${c.total_cogs}">${formatMoney(c.total_cogs)}</td>
-                            <td class="money-val" data-usd="${c.total_revenue}">${formatMoney(c.total_revenue)}</td>
+                            <td class="money-val">${formatMoney(c.total_cogs)}</td>
+                            <td class="money-val">${formatMoney(c.total_revenue)}</td>
                             <td><span class="badge ${c.cost_to_revenue_ratio_pct > 65 ? 'bg-warning text-dark' : 'bg-primary'}">${c.cost_to_revenue_ratio_pct}%</span></td>
                         </tr>
                     `).join('');
@@ -728,18 +871,24 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <tr>
                             <td>${idx + 1}</td>
                             <td class="fw-semibold">${p.product_name}</td>
-                            <td class="money-val" data-usd="${p.unit_standard_cost}">${formatMoney(p.unit_standard_cost)}</td>
+                            <td class="money-val">${formatMoney(p.unit_standard_cost)}</td>
                             <td>${Number(p.units_sold).toLocaleString()}</td>
-                            <td class="money-val fw-bold" data-usd="${p.cumulative_cogs}">${formatMoney(p.cumulative_cogs)}</td>
+                            <td class="money-val fw-bold">${formatMoney(p.cumulative_cogs)}</td>
                         </tr>
                     `).join('');
                 }
+            }
 
-                logAuditEvent(`Queried Cost Analysis ${qs || '(All Data)'}`, 'Cost Analysis');
+            if (pageType === 'rbac') {
+                await renderRbacTable();
             }
 
             if (pageType === 'audit') {
-                renderAuditTable();
+                await renderAuditTable();
+            }
+
+            if (pageType === 'settings') {
+                await loadAdminSettings();
             }
 
             if (pageType === 'profile') {
@@ -805,7 +954,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
             configForm.reset();
-            logAuditEvent(`Saved report config: ${payload.title}`, 'Executive Central');
             loadSavedConfigs();
         });
     }
@@ -820,29 +968,60 @@ document.addEventListener('DOMContentLoaded', async () => {
             alert(data.error || 'Delete permission denied.');
             return;
         }
-        logAuditEvent(`Deleted report config #${reportId}`, 'Executive Central');
         loadSavedConfigs();
     };
 
-    // 5. Audit Logs & Profile Helpers (Available to ALL 7 Roles)
-    function renderAuditTable() {
+    // 5. Separated RBAC, Audit Logs, Admin Settings & Profile Helpers
+    async function renderRbacTable() {
+        const tbody = document.getElementById('rbac-users-tbody');
+        if (!tbody) return;
+        const data = await apiGet('/api/rbac/');
+        const users = data.users || [];
+        tbody.innerHTML = users.map(u => `
+            <tr>
+                <td>${u.id}</td>
+                <td class="fw-semibold">${u.username}</td>
+                <td><code>${u.role}</code></td>
+                <td>${u.role_display}</td>
+                <td><span class="badge ${u.is_active ? 'bg-success' : 'bg-secondary'}">${u.is_active ? 'Active' : 'Inactive'}</span></td>
+            </tr>
+        `).join('');
+    }
+
+    async function renderAuditTable() {
         const tbody = document.getElementById('audit-tbody');
         if (!tbody) return;
-        const logs = JSON.parse(localStorage.getItem('aw_audit_logs') || '[]');
+        const data = await apiGet('/api/audit/');
+        const logs = data.audit_logs || [];
         if (logs.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">No session events recorded yet. Navigate through modules to generate live audit entries.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">No audit entries recorded in database yet.</td></tr>';
             return;
         }
         tbody.innerHTML = logs.map(l => `
             <tr>
                 <td><code>${l.timestamp}</code></td>
-                <td class="fw-semibold">${l.user}</td>
+                <td class="fw-semibold">${l.username}</td>
                 <td>${l.role}</td>
-                <td>${l.action}</td>
-                <td><span class="badge bg-primary">${l.module}</span></td>
-                <td><span class="badge ${l.status === 'SUCCESS' ? 'bg-success' : 'bg-danger'}">${l.status}</span></td>
+                <td><span class="badge bg-info text-dark">${l.action}</span></td>
+                <td><span class="badge bg-primary">${l.module || 'System'}</span></td>
+                <td class="small">${l.details || '—'}</td>
             </tr>
         `).join('');
+    }
+
+    async function loadAdminSettings() {
+        const cfg = await apiGet('/api/settings/');
+        activeCurrency = cfg;
+        if (setCurrencyCodeEl) setCurrencyCodeEl.value = cfg.currency_code;
+        if (setCurrencySymbolEl) setCurrencySymbolEl.value = cfg.currency_symbol;
+        if (setCurrencyMultEl) setCurrencyMultEl.value = cfg.currency_multiplier;
+        if (setCurrencyEl) {
+            setCurrencyEl.value = presetRates[cfg.currency_code] ? cfg.currency_code : 'CUSTOM';
+        }
+        const metaEl = document.getElementById('currency-updated-meta');
+        if (metaEl && cfg.updated_by) {
+            metaEl.textContent = `Last updated by ${cfg.updated_by} at ${cfg.updated_at}`;
+        }
     }
 
     function renderLiveProfile() {

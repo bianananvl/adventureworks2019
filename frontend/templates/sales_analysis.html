@@ -18,29 +18,52 @@
         <div class="row g-2 align-items-center">
             <div class="col-auto"><label class="fw-bold">Order Year:</label></div>
             <div class="col-auto"><select class="form-select form-select-sm" id="global-year"></select></div>
-            <div class="col-auto"><label class="fw-bold">Product Category:</label></div>
+
+            <div class="col-auto ms-2"><label class="fw-bold">Product Category:</label></div>
             <div class="col-auto"><select class="form-select form-select-sm" id="global-category"></select></div>
-            <div class="col-auto ms-auto"><label class="fw-bold">Currency:</label></div>
+
+            <div class="col-auto ms-2"><label class="fw-bold">Compare Sales Staff:</label></div>
             <div class="col-auto">
-                <select class="form-select form-select-sm" id="global-currency">
-                    <option value="USD">USD ($)</option>
-                    <option value="PHP">PHP (₱)</option>
-                    <option value="EUR">EUR (€)</option>
-                    <option value="JPY">JPY (¥)</option>
-                </select>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="staffDropdownBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                        All Sales Staff
+                    </button>
+                    <div class="dropdown-menu p-2 shadow" style="min-width: 250px; max-height: 260px; overflow-y: auto;" id="staff-checkbox-list">
+                        <div class="text-muted small px-2 py-1">Loading sales staff...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-auto ms-auto">
+                <span class="badge bg-light text-dark border" id="active-currency-badge">Currency: USD ($)</span>
             </div>
         </div>
     </div>
 
     <div class="container-fluid p-0">
         <h2 class="fw-bold mb-1">Sales Analysis</h2>
-        <p class="text-muted mb-4">Category performance, historical order trends, and Top/Bottom 10 products from <code>Sales.SalesOrderDetail</code>.</p>
+        <p class="text-muted mb-4">Category performance, historical order trends, staff comparisons, and Top/Bottom 10 products from <code>Sales.SalesOrderDetail</code>.</p>
 
         <div class="row g-3 mb-4">
             <div class="col-md-3"><div class="card p-3 border-0 shadow-sm"><small class="text-muted">Total Sales Amount</small><h3 class="fw-bold my-1 money-val" id="sales-kpi-revenue" data-usd="0">—</h3></div></div>
             <div class="col-md-3"><div class="card p-3 border-0 shadow-sm"><small class="text-muted">Total Orders</small><h3 class="fw-bold my-1" id="sales-kpi-orders">—</h3></div></div>
             <div class="col-md-3"><div class="card p-3 border-0 shadow-sm"><small class="text-muted">Total Units Sold</small><h3 class="fw-bold my-1" id="sales-kpi-units">—</h3></div></div>
             <div class="col-md-3"><div class="card p-3 border-0 shadow-sm"><small class="text-muted">Avg Line Item Value</small><h3 class="fw-bold my-1 money-val" id="sales-kpi-avg-line" data-usd="0">—</h3></div></div>
+        </div>
+
+        <!-- MULTI-STAFF YEAR-OVER-YEAR COMPARISON CHART -->
+        <div class="card p-3 border-0 shadow-sm mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div>
+                    <h5 class="fw-bold m-0">Sales Staff Year-over-Year Comparison</h5>
+                    <small class="text-muted" id="staff-comp-subtitle">Select 2 or more staff checkboxes above to compare yearly sales side-by-side.</small>
+                </div>
+                <select class="form-select form-select-sm w-auto chart-type-switcher" data-target="staffComparisonChart">
+                    <option value="bar">Bar</option>
+                    <option value="line">Line</option>
+                </select>
+            </div>
+            <div style="height: 250px;"><canvas id="staffComparisonChart"></canvas></div>
         </div>
 
         <div class="row g-3 mb-4">

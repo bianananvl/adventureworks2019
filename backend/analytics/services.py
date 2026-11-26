@@ -1,5 +1,6 @@
 from decimal import Decimal
 from django.db import connections
+from .models import SystemSettings
 
 
 def _dictfetchall(cursor):
@@ -13,10 +14,34 @@ def _dictfetchall(cursor):
     ]
 
 
+def get_currency_config():
+    cfg = SystemSettings.get_solo()
+    return {
+        "currency_code": cfg.currency_code,
+        "currency_symbol": cfg.currency_symbol,
+        "currency_multiplier": float(cfg.currency_multiplier),
+    }
+
+
+def _scale_money(rows_or_dict, fields, multiplier):
+    if multiplier == 1.0:
+        return rows_or_dict
+    if isinstance(rows_or_dict, dict):
+        for f in fields:
+            if f in rows_or_dict and rows_or_dict[f] is not None:
+                rows_or_dict[f] = round(float(rows_or_dict[f]) * multiplier, 2)
+        return rows_or_dict
+    for row in rows_or_dict:
+        for f in fields:
+            if f in row and row[f] is not None:
+                row[f] = round(float(row[f]) * multiplier, 2)
+    return rows_or_dict
+
+
 def get_available_filters():
     """
-    Dynamically inspects the instructor's AdventureWorks database for actual
-    available years and product categories (never hardcoding assumed years).
+    Dynamically inspects AdventureWorks for available years, product categories,
+    active sales staff (Sales.SalesPerson), and active admin currency settings.
     """
     with connections["adventureworks"].cursor() as cursor:
         cursor.execute(
@@ -38,10 +63,34 @@ def get_available_filters():
         )
         categories = _dictfetchall(cursor)
 
-    return {"available_years": years, "categories": categories}
+        cursor.execute(
+            """
+            SELECT DISTINCT
+                sp.BusinessEntityID AS staff_id,
+                LTRIM(RTRIM(p.FirstName + ' ' + p.LastName)) AS staff_name
+            FROM Sales.SalesPerson sp
+            INNER JOIN Person.Person p ON sp.BusinessEntityID = p.BusinessEntityID
+            INNER JOIN Sales.SalesOrderHeader soh ON sp.BusinessEntityID = soh.SalesPersonID
+            ORDER BY staff_name ASC;
+            """
+        )
+        sales_staff = _dictfetchall(cursor)
+
+    return {
+        "available_years": years,
+        "categories": categories,
+        "sales_staff": sales_staff,
+        "currency": get_currency_config(),
+    }
 
 
-def _build_where_clause(year=None, category_id=None, table_alias_header="soh", table_alias_cat="pc"):
+def _build_where_clause(
+    year=None,
+    category_id=None,
+    staff_ids=None,
+    table_alias_header="soh",
+    table_alias_cat="pc",
+):
     clauses = ["1=1"]
     params = []
     if year:
@@ -50,14 +99,27 @@ def _build_where_clause(year=None, category_id=None, table_alias_header="soh", t
     if category_id:
         clauses.append(f"{table_alias_cat}.ProductCategoryID = %s")
         params.append(int(category_id))
+    if staff_ids:
+        clean_ids = [int(sid) for sid in staff_ids if str(sid).strip().isdigit()]
+        if clean_ids:
+            placeholders = ", ".join(["%s"] * len(clean_ids))
+            clauses.append(f"{table_alias_header}.SalesPersonID IN ({placeholders})")
+            params.extend(clean_ids)
     return " AND ".join(clauses), params
 
 
 # ==============================================================================
-# MODULE 1: SALES REPORT
+# MODULE 1: SALES REPORT (WITH MULTI-STAFF YEAR-OVER-YEAR COMPARISON)
 # ==============================================================================
-def get_sales_report(year=None, category_id=None):
-    where_sql, params = _build_where_clause(year, category_id)
+def get_sales_report(year=None, category_id=None, staff_ids=None):
+    currency = get_currency_config()
+    mult = currency["currency_multiplier"]
+    clean_staff_ids = (
+        [int(sid) for sid in staff_ids if str(sid).strip().isdigit()]
+        if staff_ids
+        else []
+    )
+    where_sql, params = _build_where_clause(year, category_id, clean_staff_ids)
 
     with connections["adventureworks"].cursor() as cursor:
         # 1. KPI Summary
@@ -77,7 +139,9 @@ def get_sales_report(year=None, category_id=None):
             """,
             params,
         )
-        kpis = _dictfetchall(cursor)[0]
+        kpis = _scale_money(
+            _dictfetchall(cursor)[0], ["total_sales_amount", "avg_line_value"], mult
+        )
 
         # 2. Sales Trends across available periods (Year-Month)
         cursor.execute(
@@ -99,7 +163,7 @@ def get_sales_report(year=None, category_id=None):
             """,
             params,
         )
-        trends = _dictfetchall(cursor)
+        trends = _scale_money(_dictfetchall(cursor), ["sales_amount"], mult)
 
         # 3. Sales by Product Category
         cursor.execute(
@@ -119,7 +183,7 @@ def get_sales_report(year=None, category_id=None):
             """,
             params,
         )
-        by_category = _dictfetchall(cursor)
+        by_category = _scale_money(_dictfetchall(cursor), ["sales_amount"], mult)
 
         # 4. Top 10 High-Performing Products
         cursor.execute(
@@ -141,9 +205,9 @@ def get_sales_report(year=None, category_id=None):
             """,
             params,
         )
-        top_products = _dictfetchall(cursor)
+        top_products = _scale_money(_dictfetchall(cursor), ["total_sales"], mult)
 
-        # 5. Bottom 10 Low-Performing Products (with at least 1 sale)
+        # 5. Bottom 10 Low-Performing Products
         cursor.execute(
             f"""
             SELECT TOP 10
@@ -164,19 +228,52 @@ def get_sales_report(year=None, category_id=None):
             """,
             params,
         )
-        low_products = _dictfetchall(cursor)
+        low_products = _scale_money(_dictfetchall(cursor), ["total_sales"], mult)
+
+        # 6. Multi-Staff Yearly Comparison (for 2+ checked staff across years)
+        # Note: deliberately excludes single-year filter so users see differences across all years
+        comp_where, comp_params = _build_where_clause(
+            year=None, category_id=category_id, staff_ids=clean_staff_ids
+        )
+        cursor.execute(
+            f"""
+            SELECT
+                soh.SalesPersonID AS staff_id,
+                LTRIM(RTRIM(per.FirstName + ' ' + per.LastName)) AS staff_name,
+                YEAR(soh.OrderDate) AS year,
+                COUNT(DISTINCT soh.SalesOrderID) AS total_orders,
+                SUM(sod.OrderQty) AS units_sold,
+                SUM(sod.LineTotal) AS sales_amount
+            FROM Sales.SalesOrderDetail sod
+            INNER JOIN Sales.SalesOrderHeader soh ON sod.SalesOrderID = soh.SalesOrderID
+            INNER JOIN Person.Person per ON soh.SalesPersonID = per.BusinessEntityID
+            LEFT JOIN Production.Product p ON sod.ProductID = p.ProductID
+            LEFT JOIN Production.ProductSubcategory psc ON p.ProductSubcategoryID = psc.ProductSubcategoryID
+            LEFT JOIN Production.ProductCategory pc ON psc.ProductCategoryID = pc.ProductCategoryID
+            WHERE soh.SalesPersonID IS NOT NULL AND {comp_where}
+            GROUP BY soh.SalesPersonID, per.FirstName, per.LastName, YEAR(soh.OrderDate)
+            ORDER BY year ASC, staff_name ASC;
+            """,
+            comp_params,
+        )
+        staff_comparison = _scale_money(_dictfetchall(cursor), ["sales_amount"], mult)
 
     return {
         "module": "Sales Report",
+        "currency": currency,
+        "selected_staff_ids": clean_staff_ids,
         "kpis": kpis,
         "sales_trends": trends,
         "sales_by_category": by_category,
+        "staff_comparison": staff_comparison,
         "top_products": top_products,
         "low_products": low_products,
         "governance": {
             "source_tables": [
                 "Sales.SalesOrderHeader",
                 "Sales.SalesOrderDetail",
+                "Sales.SalesPerson",
+                "Person.Person",
                 "Production.Product",
                 "Production.ProductSubcategory",
                 "Production.ProductCategory",
@@ -190,6 +287,8 @@ def get_sales_report(year=None, category_id=None):
 # MODULE 2: CUSTOMER PROFILE
 # ==============================================================================
 def get_customer_profile_report(year=None, segment=None):
+    currency = get_currency_config()
+    mult = currency["currency_multiplier"]
     year_int = int(year) if year else None
     seg_clean = (segment or "").strip()
 
@@ -210,7 +309,6 @@ def get_customer_profile_report(year=None, segment=None):
     vip_where = " AND ".join(vip_clauses)
 
     with connections["adventureworks"].cursor() as cursor:
-        # 1. Customer Segmentation (B2B Store vs B2C Individual)
         cursor.execute(
             f"""
             SELECT
@@ -229,9 +327,10 @@ def get_customer_profile_report(year=None, segment=None):
             """,
             base_params,
         )
-        segments = _dictfetchall(cursor)
+        segments = _scale_money(
+            _dictfetchall(cursor), ["total_spend", "avg_order_value"], mult
+        )
 
-        # 2. Top 15 High-Value Customers (supports All, Store, or Individual)
         cursor.execute(
             f"""
             SELECT TOP 15
@@ -257,9 +356,10 @@ def get_customer_profile_report(year=None, segment=None):
             """,
             vip_params,
         )
-        high_value_customers = _dictfetchall(cursor)
+        high_value_customers = _scale_money(
+            _dictfetchall(cursor), ["total_spend", "avg_order_value"], mult
+        )
 
-        # 3. Purchase Frequency Distribution (Derived subquery for SQL Server / pyodbc safety)
         cursor.execute(
             f"""
             SELECT
@@ -288,6 +388,7 @@ def get_customer_profile_report(year=None, segment=None):
 
     return {
         "module": "Customer Profile",
+        "currency": currency,
         "segments": segments,
         "high_value_customers": high_value_customers,
         "frequency_distribution": frequency_distribution,
@@ -307,10 +408,11 @@ def get_customer_profile_report(year=None, segment=None):
 # MODULE 3: REVENUE AND LOSS REPORT
 # ==============================================================================
 def get_revenue_and_loss_report(year=None, category_id=None):
+    currency = get_currency_config()
+    mult = currency["currency_multiplier"]
     where_sql, params = _build_where_clause(year, category_id)
 
     with connections["adventureworks"].cursor() as cursor:
-        # 1. Revenue, Standard Product Cost (COGS Proxy), Gross Margin, & Discount Erosion
         cursor.execute(
             f"""
             SELECT
@@ -328,13 +430,22 @@ def get_revenue_and_loss_report(year=None, category_id=None):
             """,
             params,
         )
-        summary = _dictfetchall(cursor)[0]
+        summary = _scale_money(
+            _dictfetchall(cursor)[0],
+            [
+                "gross_revenue_before_discount",
+                "discount_erosion",
+                "net_product_revenue",
+                "estimated_cogs",
+                "gross_profit",
+            ],
+            mult,
+        )
         net_rev = summary["net_product_revenue"]
         summary["gross_margin_pct"] = (
             round((summary["gross_profit"] / net_rev) * 100, 2) if net_rev else 0.0
         )
 
-        # 2. Revenue & Gross Profit Trends by Period
         cursor.execute(
             f"""
             SELECT
@@ -355,9 +466,10 @@ def get_revenue_and_loss_report(year=None, category_id=None):
             """,
             params,
         )
-        trends = _dictfetchall(cursor)
+        trends = _scale_money(
+            _dictfetchall(cursor), ["net_revenue", "estimated_cogs", "gross_profit"], mult
+        )
 
-        # 3. Negative Margin / Loss-Making Line Items (Where Net LineTotal < StandardCost * OrderQty)
         cursor.execute(
             f"""
             SELECT TOP 15
@@ -380,10 +492,15 @@ def get_revenue_and_loss_report(year=None, category_id=None):
             """,
             params,
         )
-        negative_margin_products = _dictfetchall(cursor)
+        negative_margin_products = _scale_money(
+            _dictfetchall(cursor),
+            ["net_revenue", "standard_cogs", "net_margin_variance"],
+            mult,
+        )
 
     return {
         "module": "Revenue and Loss Report",
+        "currency": currency,
         "financial_summary": summary,
         "revenue_trends": trends,
         "negative_margin_products": negative_margin_products,
@@ -412,12 +529,13 @@ def get_revenue_and_loss_report(year=None, category_id=None):
 # MODULE 4: COST REPORT
 # ==============================================================================
 def get_cost_report(year=None, category_id=None):
+    currency = get_currency_config()
+    mult = currency["currency_multiplier"]
     where_sql, params = _build_where_clause(year, category_id)
     po_where = "YEAR(poh.OrderDate) = %s" if year else "1=1"
     po_params = [int(year)] if year else []
 
     with connections["adventureworks"].cursor() as cursor:
-        # 1. Recorded Direct COGS & Freight/Tax Costs on Sales Orders
         cursor.execute(
             f"""
             SELECT
@@ -433,9 +551,12 @@ def get_cost_report(year=None, category_id=None):
             """,
             params,
         )
-        sales_side_costs = _dictfetchall(cursor)[0]
+        sales_side_costs = _scale_money(
+            _dictfetchall(cursor)[0],
+            ["total_standard_cogs", "outbound_freight_cost", "tax_amount"],
+            mult,
+        )
 
-        # 2. Procurement / Vendor Purchase Order Spend
         cursor.execute(
             f"""
             SELECT
@@ -448,9 +569,12 @@ def get_cost_report(year=None, category_id=None):
             """,
             po_params,
         )
-        procurement_costs = _dictfetchall(cursor)[0]
+        procurement_costs = _scale_money(
+            _dictfetchall(cursor)[0],
+            ["procurement_subtotal", "inbound_freight", "total_procurement_spend"],
+            mult,
+        )
 
-        # 3. Cost Distribution by Product Category
         cursor.execute(
             f"""
             SELECT
@@ -473,9 +597,10 @@ def get_cost_report(year=None, category_id=None):
             """,
             params,
         )
-        cost_by_category = _dictfetchall(cursor)
+        cost_by_category = _scale_money(
+            _dictfetchall(cursor), ["total_cogs", "total_revenue"], mult
+        )
 
-        # 4. Top 10 Highest Cost Contributor Products
         cursor.execute(
             f"""
             SELECT TOP 10
@@ -495,10 +620,13 @@ def get_cost_report(year=None, category_id=None):
             """,
             params,
         )
-        top_cost_products = _dictfetchall(cursor)
+        top_cost_products = _scale_money(
+            _dictfetchall(cursor), ["unit_standard_cost", "cumulative_cogs"], mult
+        )
 
     return {
         "module": "Cost Report",
+        "currency": currency,
         "sales_side_costs": sales_side_costs,
         "procurement_costs": procurement_costs,
         "cost_by_category": cost_by_category,

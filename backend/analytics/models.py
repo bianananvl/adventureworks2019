@@ -1,3 +1,4 @@
+from decimal import Decimal
 from django.conf import settings
 from django.db import models
 
@@ -24,18 +25,14 @@ class UserRoleProfile(models.Model):
         blank=True,
         help_text="Optional ProductCategoryID scope for Supervisor/Manager roles.",
     )
-    # Granular module-level view permissions (especially useful for Employee scoping)
     can_view_sales = models.BooleanField(default=True)
     can_view_customers = models.BooleanField(default=False)
     can_view_revenue_loss = models.BooleanField(default=False)
     can_view_cost = models.BooleanField(default=False)
-
-    # Action permissions on application-managed report configurations
     can_edit_reports = models.BooleanField(default=False)
     can_delete_reports = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
-        # Enforce baseline RBAC matrix defaults on save
         if self.role == self.RoleChoices.ADMINISTRATOR:
             self.can_view_sales = True
             self.can_view_customers = True
@@ -88,3 +85,72 @@ class SavedReportConfig(models.Model):
 
     def __str__(self):
         return f"[{self.module}] {self.title}"
+
+
+class SystemSettings(models.Model):
+    """
+    Admin-managed global settings (singleton row id=1), including the active
+    currency multiplier applied across AdventureWorks USD figures.
+    """
+
+    currency_code = models.CharField(
+        max_length=10,
+        default="USD",
+        help_text="Display currency code (e.g., USD, PHP, EUR).",
+    )
+    currency_symbol = models.CharField(
+        max_length=5,
+        default="$",
+        help_text="Display symbol (e.g., $, ₱, €).",
+    )
+    currency_multiplier = models.DecimalField(
+        max_digits=12,
+        decimal_places=4,
+        default=Decimal("1.0000"),
+        help_text="Multiplier applied to base USD figures from AdventureWorks (e.g., 58.5000 for PHP).",
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "System Settings"
+        verbose_name_plural = "System Settings"
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(
+            pk=1,
+            defaults={
+                "currency_code": "USD",
+                "currency_symbol": "$",
+                "currency_multiplier": Decimal("1.0000"),
+            },
+        )
+        return obj
+
+    def __str__(self):
+        return f"{self.currency_code} ({self.currency_symbol}) x {self.currency_multiplier}"
+
+
+class AuditLog(models.Model):
+    """
+    Dedicated audit trail separated from RBAC user/role management.
+    """
+
+    timestamp = models.DateTimeField(auto_now_add=True)
+    username = models.CharField(max_length=150)
+    role = models.CharField(max_length=50, blank=True)
+    action = models.CharField(max_length=100)
+    module = models.CharField(max_length=100, blank=True)
+    details = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-timestamp"]
+
+    def __str__(self):
+        return f"[{self.timestamp:%Y-%m-%d %H:%M}] {self.username}: {self.action}"

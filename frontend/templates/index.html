@@ -46,7 +46,8 @@
                     <li class="nav-item" id="nav-customers"><a href="/customer_profile.html" target="content-frame" class="nav-link text-white">Customer Profile</a></li>
                     <li class="nav-item" id="nav-revloss"><a href="/revenue_loss.html" target="content-frame" class="nav-link text-white">Revenue &amp; Loss</a></li>
                     <li class="nav-item" id="nav-cost"><a href="/cost_analysis.html" target="content-frame" class="nav-link text-white">Cost Analysis</a></li>
-                    <li class="nav-item" id="nav-audit"><a href="/audit_logs.html" target="content-frame" class="nav-link text-white">Audit Logs &amp; RBAC</a></li>
+                    <li class="nav-item" id="nav-rbac"><a href="/rbac.html" target="content-frame" class="nav-link text-white">RBAC Policy</a></li>
+                    <li class="nav-item" id="nav-audit"><a href="/audit_logs.html" target="content-frame" class="nav-link text-white">Audit Logs</a></li>
                 </ul>
 
                 <hr class="my-3" style="border-color: rgba(174, 213, 245, 0.25);">
@@ -90,8 +91,7 @@
             const role = (session.role || '').toUpperCase();
             const p = session.permissions || {};
 
-            // Reset visibility before applying RBAC rules (nav-profile is ALWAYS visible)
-            ['nav-exec', 'nav-sales', 'nav-customers', 'nav-revloss', 'nav-cost', 'nav-audit', 'nav-settings', 'nav-profile'].forEach(id => {
+            ['nav-exec', 'nav-sales', 'nav-customers', 'nav-revloss', 'nav-cost', 'nav-rbac', 'nav-audit', 'nav-settings', 'nav-profile'].forEach(id => {
                 document.getElementById(id)?.classList.remove('d-none');
             });
 
@@ -101,6 +101,11 @@
                 document.getElementById('nav-exec')?.classList.add('d-none');
                 document.getElementById('nav-audit')?.classList.add('d-none');
                 document.getElementById('nav-settings')?.classList.add('d-none');
+            }
+
+            // RBAC Policy tab is strictly for Administrator
+            if (role !== 'ADMINISTRATOR' && p.can_view_rbac !== true) {
+                document.getElementById('nav-rbac')?.classList.add('d-none');
             }
 
             if (p.can_view_sales === false) document.getElementById('nav-sales')?.classList.add('d-none');
@@ -156,16 +161,6 @@
                     return;
                 }
                 localStorage.setItem('aw_session', JSON.stringify(data));
-                const logs = JSON.parse(localStorage.getItem('aw_audit_logs') || '[]');
-                logs.unshift({
-                    timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),
-                    user: data.user,
-                    role: data.role_display,
-                    action: 'Authenticated via Django RBAC Session',
-                    module: 'Auth Portal',
-                    status: 'SUCCESS'
-                });
-                localStorage.setItem('aw_audit_logs', JSON.stringify(logs));
                 applySessionUI(data);
             } catch (err) {
                 errBox.textContent = 'Cannot reach Django server on port 8000.';

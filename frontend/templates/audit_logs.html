@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RBAC &amp; Audit Logs | AdventureWorks2019</title>
+    <title>Audit Logs | AdventureWorks2019</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
@@ -16,91 +16,20 @@
     <div class="container-fluid p-0">
         <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
             <div>
-                <h2 class="fw-bold mb-1">Governance, RBAC &amp; Audit Logs</h2>
+                <h2 class="fw-bold mb-1">System &amp; Governance Audit Logs</h2>
+                <p class="text-muted mb-0">Persistent database log of sign-ins, setting updates, report presets, and chart exports.</p>
             </div>
-            <span class="badge bg-primary px-3 py-2">7-Role Enterprise Access Policy</span>
+            <span class="badge bg-primary px-3 py-2">Live SQLite Audit Trail</span>
         </div>
 
-        <!-- 1. DEPARTMENTAL DATA SILO AUTHORIZATION POLICY (RBAC MATRIX) -->
-        <div class="card p-3 border-0 shadow-sm mb-4">
-            <div class="mb-3">
-                <h5 class="fw-bold mb-1 text-teal">Departmental Data Silo Authorization Policy</h5>
-            </div>
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Application User Role</th>
-                            <th>View Dashboard &amp; Reports</th>
-                            <th>Export Reports (PDF/CSV)</th>
-                            <th>Manage User Notes / Tags</th>
-                            <th>Configure App Settings &amp; RBAC</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td class="fw-bold">Administrator<br><small class="text-muted fw-normal">IT Governance &amp; Security</small></td>
-                            <td><span class="badge bg-success">ALLOWED (All Modules)</span></td>
-                            <td><span class="badge bg-success">ALLOWED</span></td>
-                            <td><span class="badge bg-primary">Create / Edit / Delete</span></td>
-                            <td><span class="badge bg-success">AUTHORIZED</span></td>
-                        </tr>
-                        <tr>
-                            <td class="fw-bold">Executive Management<br><small class="text-muted fw-normal">Manager</small></td>
-                            <td><span class="badge bg-success">ALLOWED (All Modules)</span></td>
-                            <td><span class="badge bg-success">ALLOWED</span></td>
-                            <td><span class="badge bg-info text-dark">Create / Edit</span></td>
-                            <td><span class="badge bg-danger">DENIED (Read-Only)</span></td>
-                        </tr>
-                        <tr>
-                            <td class="fw-bold">Department Operations Supervisor<br><small class="text-muted fw-normal">Supervisor</small></td>
-                            <td><span class="badge bg-success">ALLOWED (Sales &amp; Customers)</span></td>
-                            <td><span class="badge bg-success">ALLOWED (Team Scope)</span></td>
-                            <td><span class="badge bg-info text-dark">Create Own</span></td>
-                            <td><span class="badge bg-danger">DENIED</span></td>
-                        </tr>
-                        <tr>
-                            <td class="fw-bold">Sales Department<br><small class="text-muted fw-normal">Sales Rep / Analyst</small></td>
-                            <td><span class="badge bg-success">ALLOWED (Sales Only)</span></td>
-                            <td><span class="badge bg-danger">DENIED</span></td>
-                            <td><span class="badge bg-secondary">View Only</span></td>
-                            <td><span class="badge bg-danger">DENIED</span></td>
-                        </tr>
-                        <tr>
-                            <td class="fw-bold">Marketing &amp; Customer Relations<br><small class="text-muted fw-normal">Customer Analyst</small></td>
-                            <td><span class="badge bg-success">ALLOWED (Customers Only)</span></td>
-                            <td><span class="badge bg-danger">DENIED</span></td>
-                            <td><span class="badge bg-secondary">View Only</span></td>
-                            <td><span class="badge bg-danger">DENIED</span></td>
-                        </tr>
-                        <tr>
-                            <td class="fw-bold">Financial &amp; Pricing Analyst<br><small class="text-muted fw-normal">Financial Analyst</small></td>
-                            <td><span class="badge bg-success">ALLOWED (Revenue &amp; Loss)</span></td>
-                            <td><span class="badge bg-danger">DENIED</span></td>
-                            <td><span class="badge bg-secondary">View Only</span></td>
-                            <td><span class="badge bg-danger">DENIED</span></td>
-                        </tr>
-                        <tr>
-                            <td class="fw-bold">Manufacturing Cost Analyst<br><small class="text-muted fw-normal">Cost / Inventory Analyst</small></td>
-                            <td><span class="badge bg-success">ALLOWED (Cost Analysis)</span></td>
-                            <td><span class="badge bg-danger">DENIED</span></td>
-                            <td><span class="badge bg-secondary">View Only</span></td>
-                            <td><span class="badge bg-danger">DENIED</span></td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- 2. LIVE SESSION AUDIT TRAIL -->
         <div class="card p-3 border-0 shadow-sm">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                 <div>
-                    <h5 class="fw-bold mb-1 text-teal">Session Query &amp; Governance Audit Logs</h5>
-                    <p class="text-muted small mb-0">Real-time record of authenticated module queries, filter executions, and configuration changes.</p>
+                    <h5 class="fw-bold mb-1 text-teal">Recorded Activity History</h5>
+                    <p class="text-muted small mb-0">Fetched directly from <code>/api/audit/</code>.</p>
                 </div>
                 <div style="min-width: 260px;">
-                    <input type="search" class="form-control form-control-sm" id="audit-search" placeholder="Search user, role, action, or module...">
+                    <input type="search" class="form-control form-control-sm" id="audit-search" placeholder="Search user, role, action, or details...">
                 </div>
             </div>
             <div class="table-responsive">
@@ -112,7 +41,7 @@
                             <th>Role</th>
                             <th>Action</th>
                             <th>Module</th>
-                            <th>Status</th>
+                            <th>Details</th>
                         </tr>
                     </thead>
                     <tbody id="audit-tbody"></tbody>
