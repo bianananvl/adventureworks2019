@@ -57,12 +57,18 @@ DATABASES = {
     },
     "adventureworks": {
         "ENGINE": "mssql",
-        "NAME": "AdventureWorks2019",
-        "HOST": "AshleyCareng",
-        "PORT": "",
+        "NAME": os.environ.get("AW_DB_NAME", "AdventureWorks2019"),
+        "USER": os.environ.get("AW_DB_USER", ""),
+        "PASSWORD": os.environ.get("AW_DB_PASSWORD", ""),
+        "HOST": os.environ.get("AW_DB_HOST", "AshleyCareng"),
+        "PORT": os.environ.get("AW_DB_PORT", ""),
         "OPTIONS": {
-            "driver": "ODBC Driver 17 for SQL Server",
-            "Trusted_Connection": "yes",
+            "driver": os.environ.get("AW_DB_DRIVER", "ODBC Driver 17 for SQL Server"),
+            **(
+                {"Trusted_Connection": "yes"}
+                if not os.environ.get("AW_DB_USER")
+                else {}
+            ),
             "extra_params": "TrustServerCertificate=yes;",
         },
     },
@@ -82,4 +88,3 @@ STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR.parent / "frontend" / "assets"]
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 X_FRAME_OPTIONS = "SAMEORIGIN"
-
