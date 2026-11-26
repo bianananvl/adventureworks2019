@@ -10,6 +10,7 @@ ROLE_PERMISSIONS = {
         "can_view_revenue_loss": True,
         "can_view_cost": True,
         "can_view_rbac": True,
+        "can_manage_users": True,
         "can_view_audit": True,
         "can_edit_settings": True,
         "can_view_profile": True,
@@ -25,6 +26,7 @@ ROLE_PERMISSIONS = {
         "can_view_revenue_loss": True,
         "can_view_cost": True,
         "can_view_rbac": False,
+        "can_manage_users": False,
         "can_view_audit": True,
         "can_edit_settings": False,
         "can_view_profile": True,
@@ -40,6 +42,7 @@ ROLE_PERMISSIONS = {
         "can_view_revenue_loss": False,
         "can_view_cost": False,
         "can_view_rbac": False,
+        "can_manage_users": False,
         "can_view_audit": False,
         "can_edit_settings": False,
         "can_view_profile": True,
@@ -55,6 +58,7 @@ ROLE_PERMISSIONS = {
         "can_view_revenue_loss": False,
         "can_view_cost": False,
         "can_view_rbac": False,
+        "can_manage_users": False,
         "can_view_audit": False,
         "can_edit_settings": False,
         "can_view_profile": True,
@@ -70,6 +74,7 @@ ROLE_PERMISSIONS = {
         "can_view_revenue_loss": False,
         "can_view_cost": False,
         "can_view_rbac": False,
+        "can_manage_users": False,
         "can_view_audit": False,
         "can_edit_settings": False,
         "can_view_profile": True,
@@ -85,6 +90,7 @@ ROLE_PERMISSIONS = {
         "can_view_revenue_loss": True,
         "can_view_cost": False,
         "can_view_rbac": False,
+        "can_manage_users": False,
         "can_view_audit": False,
         "can_edit_settings": False,
         "can_view_profile": True,
@@ -100,6 +106,7 @@ ROLE_PERMISSIONS = {
         "can_view_revenue_loss": False,
         "can_view_cost": True,
         "can_view_rbac": False,
+        "can_manage_users": False,
         "can_view_audit": False,
         "can_edit_settings": False,
         "can_view_profile": True,
@@ -108,6 +115,9 @@ ROLE_PERMISSIONS = {
         "can_delete_reports": False,
     },
 }
+
+
+VALID_ROLES = list(ROLE_PERMISSIONS.keys())
 
 
 def get_user_role(user):
@@ -125,6 +135,17 @@ def require_permission(perm_key):
                 return JsonResponse({"error": "Authentication required"}, status=401)
             role = get_user_role(request.user)
             if not ROLE_PERMISSIONS.get(role, {}).get(perm_key, False):
+                from .models import AuditLog  # local import avoids an app-loading cycle
+
+                AuditLog.objects.create(
+                    username=request.user.username,
+                    role=role,
+                    action="ACCESS_DENIED",
+                    module=request.path[:100],
+                    details=f"Missing permission: {perm_key}",
+                    ip_address=request.META.get("REMOTE_ADDR") or None,
+                    status="DENIED",
+                )
                 return JsonResponse(
                     {"error": f"HTTP 403: {role} is denied access ({perm_key})"},
                     status=403,
