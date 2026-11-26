@@ -386,6 +386,20 @@ def get_customer_profile_report(year=None, segment=None):
         )
         frequency_distribution = _dictfetchall(cursor)
 
+    # Descriptive labels for each high-value account
+    for idx, c in enumerate(high_value_customers):
+        orders = int(c.get("order_frequency") or 0)
+        if orders >= 10:
+            c["loyalty_label"] = "VIP"
+        elif orders >= 5:
+            c["loyalty_label"] = "Loyal"
+        elif orders >= 2:
+            c["loyalty_label"] = "Repeat"
+        else:
+            c["loyalty_label"] = "One-Time"
+        c["value_label"] = "Platinum" if idx < 3 else ("Gold" if idx < 8 else "Silver")
+        c["segment_label"] = "B2B Store" if c.get("segment") == "Store" else "B2C Individual"
+
     return {
         "module": "Customer Profile",
         "currency": currency,
@@ -644,3 +658,568 @@ def get_cost_report(year=None, category_id=None):
             ),
         },
     }
+
+# ==============================================================================
+# COMPARATIVE ANALYTICS (YEAR / QUARTER / MONTH x DOMAIN)
+# ==============================================================================
+GRANULARITIES = ("year", "quarter", "month")
+MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+# Each comparison domain maps to a SQL label expression plus the extra joins it needs.
+SALES_DIMENSIONS = {
+    "total": {"label": "All Sales", "expr": "'All Sales'", "joins": ""},
+    "category": {
+        "label": "Product Category",
+        "expr": "COALESCE(pc.Name, 'Uncategorized')",
+        "joins": "",
+    },
+    "subcategory": {
+        "label": "Product Subcategory",
+        "expr": "COALESCE(psc.Name, 'Uncategorized')",
+        "joins": "",
+    },
+    "territory": {
+        "label": "Sales Territory",
+        "expr": "COALESCE(st.Name, 'Unassigned')",
+        "joins": "LEFT JOIN Sales.SalesTerritory st ON soh.TerritoryID = st.TerritoryID",
+    },
+    "region": {
+        "label": "Region",
+        "expr": "COALESCE(st.[Group], 'Unassigned')",
+        "joins": "LEFT JOIN Sales.SalesTerritory st ON soh.TerritoryID = st.TerritoryID",
+    },
+    "staff": {
+        "label": "Sales Staff",
+        "expr": "COALESCE(LTRIM(RTRIM(sper.FirstName + ' ' + sper.LastName)), 'Online (No Rep)')",
+        "joins": "LEFT JOIN Person.Person sper ON soh.SalesPersonID = sper.BusinessEntityID",
+    },
+    "channel": {
+        "label": "Sales Channel",
+        "expr": "CASE WHEN soh.OnlineOrderFlag = 1 THEN 'Online (B2C)' ELSE 'Reseller (B2B)' END",
+        "joins": "",
+    },
+}
+
+MAX_SERIES = 8
+
+
+def _clean_granularity(granularity):
+    g = (granularity or "month").lower()
+    return g if g in GRANULARITIES else "month"
+
+
+def _period_select(granularity, alias="soh"):
+    """Returns (select_sql, group_sql) for the period columns of the chosen granularity."""
+    year = f"YEAR({alias}.OrderDate)"
+    if granularity == "year":
+        return f"{year} AS yr, 0 AS qtr, 0 AS mon", year
+    if granularity == "quarter":
+        q = f"DATEPART(QUARTER, {alias}.OrderDate)"
+        return f"{year} AS yr, {q} AS qtr, 0 AS mon", f"{year}, {q}"
+    m = f"MONTH({alias}.OrderDate)"
+    return f"{year} AS yr, 0 AS qtr, {m} AS mon", f"{year}, {m}"
+
+
+def _period_key(granularity, row):
+    y, q, m = int(row["yr"]), int(row["qtr"] or 0), int(row["mon"] or 0)
+    if granularity == "year":
+        return (y, 0), str(y), "FY"
+    if granularity == "quarter":
+        return (y, q), f"{y}-Q{q}", f"Q{q}"
+    return (y, m), f"{y}-{m:02d}", MONTH_LABELS[m - 1]
+
+
+def _pct_change(current, previous):
+    if previous in (None, 0):
+        return None
+    return round(((current - previous) / abs(previous)) * 100, 2)
+
+
+def _monthly_values(cursor, where_sql, params, value_sql, mult=None):
+    """{(year, month): value} used for like-for-like comparisons of partial years."""
+    cursor.execute(
+        f"""
+        SELECT YEAR(soh.OrderDate) AS yr, MONTH(soh.OrderDate) AS mon, {value_sql} AS val
+        FROM Sales.SalesOrderDetail sod
+        INNER JOIN Sales.SalesOrderHeader soh ON sod.SalesOrderID = soh.SalesOrderID
+        LEFT JOIN Production.Product p ON sod.ProductID = p.ProductID
+        LEFT JOIN Production.ProductSubcategory psc ON p.ProductSubcategoryID = psc.ProductSubcategoryID
+        LEFT JOIN Production.ProductCategory pc ON psc.ProductCategoryID = pc.ProductCategoryID
+        WHERE {where_sql}
+        GROUP BY YEAR(soh.OrderDate), MONTH(soh.OrderDate);
+        """,
+        params,
+    )
+    out = {}
+    for yr, mon, val in cursor.fetchall():
+        v = float(val or 0)
+        out[(int(yr), int(mon))] = v * mult if mult else v
+    return out
+
+
+def _like_for_like(monthly):
+    """
+    For each year: number of months with data, and growth vs the SAME months of the prior year.
+    AdventureWorks 2011 starts in May and 2014 ends in June, so raw yearly growth is misleading.
+    """
+    years = sorted({y for y, _ in monthly})
+    result = {}
+    for y in years:
+        months = sorted(m for yy, m in monthly if yy == y)
+        curr = sum(monthly[(y, m)] for m in months)
+        prior_months = [m for m in months if (y - 1, m) in monthly]
+        prior = sum(monthly[(y - 1, m)] for m in prior_months)
+        result[y] = {
+            "months": len(months),
+            "partial": len(months) < 12,
+            "lfl_pct": _pct_change(curr, prior) if prior_months else None,
+            "lfl_label": (
+                f"{MONTH_LABELS[months[0] - 1]}–{MONTH_LABELS[months[-1] - 1]} vs same months {y - 1}"
+                if prior_months else None
+            ),
+        }
+    return result
+
+
+def _period_table(granularity, period_keys, period_labels, totals):
+    """Builds a per-period aggregate table with period-over-period and year-over-year growth."""
+    lookup = dict(zip(period_keys, totals))
+    rows = []
+    prev_val = None
+    for key, label, val in zip(period_keys, period_labels, totals):
+        same_last_year = lookup.get((key[0] - 1, key[1])) if granularity != "year" else None
+        rows.append(
+            {
+                "period": label,
+                "value": round(val, 2),
+                "change": round(val - prev_val, 2) if prev_val is not None else None,
+                "change_pct": _pct_change(val, prev_val) if prev_val is not None else None,
+                "yoy_pct": _pct_change(val, same_last_year) if same_last_year is not None else None,
+            }
+        )
+        prev_val = val
+    return rows
+
+
+def _yoy_overlay(granularity, period_keys, totals):
+    """Year-on-year overlay: x = Q1..Q4 or Jan..Dec, one series per year."""
+    if granularity == "year":
+        return None
+    slots = 4 if granularity == "quarter" else 12
+    labels = [f"Q{i}" for i in range(1, 5)] if granularity == "quarter" else MONTH_LABELS
+    years = sorted({k[0] for k in period_keys})
+    lookup = dict(zip(period_keys, totals))
+    series = [
+        {
+            "year": y,
+            "data": [
+                round(lookup[(y, s)], 2) if (y, s) in lookup else None
+                for s in range(1, slots + 1)
+            ],
+        }
+        for y in years
+    ]
+    return {"labels": labels, "series": series}
+
+
+def get_sales_comparison(
+    granularity="month",
+    dimension="total",
+    metric="sales_amount",
+    year=None,
+    category_id=None,
+    staff_ids=None,
+):
+    """
+    Aggregates sales by period (year / quarter / month) and compares a chosen domain
+    (category, subcategory, territory, region, staff, channel) across those periods.
+    """
+    currency = get_currency_config()
+    mult = currency["currency_multiplier"]
+    granularity = _clean_granularity(granularity)
+    dim_key = dimension if dimension in SALES_DIMENSIONS else "total"
+    dim = SALES_DIMENSIONS[dim_key]
+    metric = metric if metric in ("sales_amount", "total_orders", "units_sold") else "sales_amount"
+
+    # A yearly comparison always spans every year so there is something to compare.
+    effective_year = None if granularity == "year" else year
+    where_sql, params = _build_where_clause(effective_year, category_id, staff_ids)
+    period_sql, period_group = _period_select(granularity)
+
+    with connections["adventureworks"].cursor() as cursor:
+        cursor.execute(
+            f"""
+            SELECT
+                {period_sql},
+                {dim['expr']} AS member,
+                COUNT(DISTINCT soh.SalesOrderID) AS total_orders,
+                SUM(sod.OrderQty) AS units_sold,
+                SUM(sod.LineTotal) AS sales_amount
+            FROM Sales.SalesOrderDetail sod
+            INNER JOIN Sales.SalesOrderHeader soh ON sod.SalesOrderID = soh.SalesOrderID
+            LEFT JOIN Production.Product p ON sod.ProductID = p.ProductID
+            LEFT JOIN Production.ProductSubcategory psc ON p.ProductSubcategoryID = psc.ProductSubcategoryID
+            LEFT JOIN Production.ProductCategory pc ON psc.ProductCategoryID = pc.ProductCategoryID
+            {dim['joins']}
+            WHERE {where_sql}
+            GROUP BY {period_group}, {dim['expr']};
+            """,
+            params,
+        )
+        rows = _scale_money(_dictfetchall(cursor), ["sales_amount"], mult)
+
+        # Period totals are queried separately because DISTINCT order counts do not add up across members.
+        cursor.execute(
+            f"""
+            SELECT
+                {period_sql},
+                COUNT(DISTINCT soh.SalesOrderID) AS total_orders,
+                SUM(sod.OrderQty) AS units_sold,
+                SUM(sod.LineTotal) AS sales_amount
+            FROM Sales.SalesOrderDetail sod
+            INNER JOIN Sales.SalesOrderHeader soh ON sod.SalesOrderID = soh.SalesOrderID
+            LEFT JOIN Production.Product p ON sod.ProductID = p.ProductID
+            LEFT JOIN Production.ProductSubcategory psc ON p.ProductSubcategoryID = psc.ProductSubcategoryID
+            LEFT JOIN Production.ProductCategory pc ON psc.ProductCategoryID = pc.ProductCategoryID
+            WHERE {where_sql}
+            GROUP BY {period_group};
+            """,
+            params,
+        )
+        total_rows = _scale_money(_dictfetchall(cursor), ["sales_amount"], mult)
+
+        lfl = None
+        if granularity == "year":
+            value_sql = {
+                "sales_amount": "SUM(sod.LineTotal)",
+                "total_orders": "COUNT(DISTINCT soh.SalesOrderID)",
+                "units_sold": "SUM(sod.OrderQty)",
+            }[metric]
+            lfl = _like_for_like(_monthly_values(cursor, where_sql, params, value_sql))
+
+    # Ordered period axis
+    period_info = {}
+    for r in total_rows:
+        key, label, slot = _period_key(granularity, r)
+        period_info[key] = label
+    period_keys = sorted(period_info)
+    period_labels = [period_info[k] for k in period_keys]
+    totals_by_key = {_period_key(granularity, r)[0]: float(r[metric] or 0) for r in total_rows}
+    totals = [totals_by_key.get(k, 0.0) for k in period_keys]
+
+    # Member series: keep the biggest members, fold the rest into "Other"
+    member_totals = {}
+    cell = {}
+    for r in rows:
+        key = _period_key(granularity, r)[0]
+        val = float(r[metric] or 0)
+        member_totals[r["member"]] = member_totals.get(r["member"], 0.0) + val
+        cell[(r["member"], key)] = cell.get((r["member"], key), 0.0) + val
+    ranked = sorted(member_totals, key=lambda m: member_totals[m], reverse=True)
+    kept = ranked[:MAX_SERIES]
+    folded = ranked[MAX_SERIES:]
+
+    series = []
+    for m in kept:
+        series.append(
+            {"name": m, "data": [round(cell.get((m, k), 0.0), 2) for k in period_keys]}
+        )
+    if folded:
+        series.append(
+            {
+                "name": f"Other ({len(folded)})",
+                "data": [
+                    round(sum(cell.get((m, k), 0.0) for m in folded), 2) for k in period_keys
+                ],
+            }
+        )
+
+    grand_total = sum(member_totals.values()) or 0.0
+    members = []
+    for s in series:
+        data = s["data"]
+        last = data[-1] if data else 0.0
+        prev = data[-2] if len(data) > 1 else None
+        nonzero = [(v, lbl) for v, lbl in zip(data, period_labels)]
+        best = max(nonzero, key=lambda x: x[0]) if nonzero else (0, "—")
+        total = sum(data)
+        members.append(
+            {
+                "name": s["name"],
+                "total": round(total, 2),
+                "share_pct": round((total / grand_total) * 100, 2) if grand_total else 0.0,
+                "latest_value": round(last, 2),
+                "previous_value": round(prev, 2) if prev is not None else None,
+                "growth_pct": _pct_change(last, prev) if prev is not None else None,
+                "best_period": best[1],
+                "best_value": round(best[0], 2),
+            }
+        )
+
+    period_table = _period_table(granularity, period_keys, period_labels, totals)
+    if lfl:
+        for row, key in zip(period_table, period_keys):
+            info = lfl.get(key[0], {})
+            row.update({k: info.get(k) for k in ("months", "partial", "lfl_pct", "lfl_label")})
+
+    return {
+        "module": "Sales Comparison",
+        "currency": currency,
+        "granularity": granularity,
+        "dimension": dim_key,
+        "dimension_label": dim["label"],
+        "metric": metric,
+        "is_money": metric == "sales_amount",
+        "year_filter_applied": effective_year is not None,
+        "periods": period_labels,
+        "series": series,
+        "totals": [round(t, 2) for t in totals],
+        "period_table": period_table,
+        "member_table": members,
+        "yoy_overlay": _yoy_overlay(granularity, period_keys, totals),
+        "dimensions": {k: v["label"] for k, v in SALES_DIMENSIONS.items()},
+    }
+
+
+def get_revenue_comparison(granularity="year", year=None, category_id=None):
+    """
+    Comparative revenue & loss: net revenue, COGS, gross profit, discount erosion and margin
+    per period with period-over-period / year-over-year change, plus category profitability by year.
+    """
+    currency = get_currency_config()
+    mult = currency["currency_multiplier"]
+    granularity = _clean_granularity(granularity)
+    effective_year = None if granularity == "year" else year
+    where_sql, params = _build_where_clause(effective_year, category_id)
+    period_sql, period_group = _period_select(granularity)
+    money = ["gross_revenue", "discount_erosion", "net_revenue", "cogs", "gross_profit"]
+
+    with connections["adventureworks"].cursor() as cursor:
+        cursor.execute(
+            f"""
+            SELECT
+                {period_sql},
+                SUM(sod.UnitPrice * sod.OrderQty) AS gross_revenue,
+                SUM(sod.UnitPrice * sod.UnitPriceDiscount * sod.OrderQty) AS discount_erosion,
+                SUM(sod.LineTotal) AS net_revenue,
+                SUM(p.StandardCost * sod.OrderQty) AS cogs,
+                SUM(sod.LineTotal - (p.StandardCost * sod.OrderQty)) AS gross_profit
+            FROM Sales.SalesOrderDetail sod
+            INNER JOIN Sales.SalesOrderHeader soh ON sod.SalesOrderID = soh.SalesOrderID
+            INNER JOIN Production.Product p ON sod.ProductID = p.ProductID
+            LEFT JOIN Production.ProductSubcategory psc ON p.ProductSubcategoryID = psc.ProductSubcategoryID
+            LEFT JOIN Production.ProductCategory pc ON psc.ProductCategoryID = pc.ProductCategoryID
+            WHERE {where_sql}
+            GROUP BY {period_group};
+            """,
+            params,
+        )
+        period_rows = _scale_money(_dictfetchall(cursor), money, mult)
+
+        # Category profitability across years (respects category filter, ignores year so years can be compared)
+        cat_where, cat_params = _build_where_clause(None, category_id)
+        cursor.execute(
+            f"""
+            SELECT
+                YEAR(soh.OrderDate) AS yr,
+                COALESCE(pc.Name, 'Uncategorized') AS category_name,
+                SUM(sod.LineTotal) AS net_revenue,
+                SUM(p.StandardCost * sod.OrderQty) AS cogs,
+                SUM(sod.LineTotal - (p.StandardCost * sod.OrderQty)) AS gross_profit
+            FROM Sales.SalesOrderDetail sod
+            INNER JOIN Sales.SalesOrderHeader soh ON sod.SalesOrderID = soh.SalesOrderID
+            INNER JOIN Production.Product p ON sod.ProductID = p.ProductID
+            LEFT JOIN Production.ProductSubcategory psc ON p.ProductSubcategoryID = psc.ProductSubcategoryID
+            LEFT JOIN Production.ProductCategory pc ON psc.ProductCategoryID = pc.ProductCategoryID
+            WHERE {cat_where}
+            GROUP BY YEAR(soh.OrderDate), COALESCE(pc.Name, 'Uncategorized');
+            """,
+            cat_params,
+        )
+        cat_rows = _scale_money(_dictfetchall(cursor), ["net_revenue", "cogs", "gross_profit"], mult)
+
+        lfl_rev = lfl_gp = None
+        if granularity == "year":
+            lfl_rev = _like_for_like(_monthly_values(cursor, where_sql, params, "SUM(sod.LineTotal)"))
+            lfl_gp = _like_for_like(
+                _monthly_values(cursor, where_sql, params, "SUM(sod.LineTotal - (p.StandardCost * sod.OrderQty))")
+            )
+        all_months = _like_for_like(
+            _monthly_values(cursor, cat_where, cat_params, "COUNT(DISTINCT soh.SalesOrderID)")
+        )
+
+    by_key = {}
+    labels = {}
+    for r in period_rows:
+        key, label, _ = _period_key(granularity, r)
+        by_key[key] = r
+        labels[key] = label
+    keys = sorted(by_key)
+
+    table = []
+    prev = None
+    for k in keys:
+        r = by_key[k]
+        net = float(r["net_revenue"] or 0)
+        gp = float(r["gross_profit"] or 0)
+        gross = float(r["gross_revenue"] or 0)
+        disc = float(r["discount_erosion"] or 0)
+        ly = by_key.get((k[0] - 1, k[1])) if granularity != "year" else None
+        entry = {
+            "period": labels[k],
+            "gross_revenue": round(gross, 2),
+            "discount_erosion": round(disc, 2),
+            "discount_rate_pct": round((disc / gross) * 100, 2) if gross else 0.0,
+            "net_revenue": round(net, 2),
+            "cogs": round(float(r["cogs"] or 0), 2),
+            "gross_profit": round(gp, 2),
+            "margin_pct": round((gp / net) * 100, 2) if net else 0.0,
+            "revenue_change_pct": _pct_change(net, float(prev["net_revenue"] or 0)) if prev else None,
+            "profit_change_pct": _pct_change(gp, float(prev["gross_profit"] or 0)) if prev else None,
+            "revenue_yoy_pct": _pct_change(net, float(ly["net_revenue"] or 0)) if ly else None,
+            "profit_yoy_pct": _pct_change(gp, float(ly["gross_profit"] or 0)) if ly else None,
+        }
+        if lfl_rev:
+            info = lfl_rev.get(k[0], {})
+            entry.update(
+                {
+                    "months": info.get("months"),
+                    "partial": info.get("partial"),
+                    "revenue_lfl_pct": info.get("lfl_pct"),
+                    "profit_lfl_pct": lfl_gp.get(k[0], {}).get("lfl_pct"),
+                    "lfl_label": info.get("lfl_label"),
+                }
+            )
+        table.append(entry)
+        prev = r
+
+    years = sorted({int(r["yr"]) for r in cat_rows})
+    categories = sorted({r["category_name"] for r in cat_rows})
+    cat_lookup = {(r["category_name"], int(r["yr"])): r for r in cat_rows}
+    category_by_year = []
+    for c in categories:
+        cells = []
+        for y in years:
+            r = cat_lookup.get((c, y))
+            net = float(r["net_revenue"] or 0) if r else 0.0
+            gp = float(r["gross_profit"] or 0) if r else 0.0
+            cells.append(
+                {
+                    "year": y,
+                    "net_revenue": round(net, 2),
+                    "gross_profit": round(gp, 2),
+                    "margin_pct": round((gp / net) * 100, 2) if net else None,
+                }
+            )
+        category_by_year.append({"category_name": c, "years": cells})
+
+    net_totals = [float(by_key[k]["net_revenue"] or 0) for k in keys]
+    return {
+        "module": "Revenue Comparison",
+        "currency": currency,
+        "granularity": granularity,
+        "year_filter_applied": effective_year is not None,
+        "period_table": table,
+        "yoy_overlay": _yoy_overlay(granularity, keys, net_totals),
+        "category_years": years,
+        "partial_years": [y for y in years if all_months.get(y, {}).get("partial")],
+        "category_by_year": category_by_year,
+    }
+
+
+def get_prior_year_kpis(year, category_id=None):
+    """KPIs for year-1 so the dashboards can show year-over-year deltas."""
+    if not year:
+        return None
+    prior = int(year) - 1
+    currency = get_currency_config()
+    mult = currency["currency_multiplier"]
+    where_sql, params = _build_where_clause(prior, category_id)
+    with connections["adventureworks"].cursor() as cursor:
+        # Like-for-like: if the selected year is partial, compare only the same months of the prior year.
+        cursor.execute(
+            "SELECT DISTINCT MONTH(OrderDate) FROM Sales.SalesOrderHeader WHERE YEAR(OrderDate) = %s;",
+            [int(year)],
+        )
+        months = sorted(int(r[0]) for r in cursor.fetchall())
+        like_for_like = 0 < len(months) < 12
+        if like_for_like:
+            where_sql += f" AND MONTH(soh.OrderDate) IN ({', '.join(['%s'] * len(months))})"
+            params = params + months
+        cursor.execute(
+            f"""
+            SELECT
+                COUNT(DISTINCT soh.SalesOrderID) AS total_orders,
+                COUNT(DISTINCT soh.CustomerID) AS customers,
+                COALESCE(SUM(sod.OrderQty), 0) AS total_units_sold,
+                COALESCE(SUM(sod.LineTotal), 0) AS total_sales_amount,
+                COALESCE(SUM(sod.UnitPrice * sod.OrderQty), 0) AS gross_revenue_before_discount,
+                COALESCE(SUM(sod.UnitPrice * sod.UnitPriceDiscount * sod.OrderQty), 0) AS discount_erosion,
+                COALESCE(SUM(sod.LineTotal - (p.StandardCost * sod.OrderQty)), 0) AS gross_profit
+            FROM Sales.SalesOrderDetail sod
+            INNER JOIN Sales.SalesOrderHeader soh ON sod.SalesOrderID = soh.SalesOrderID
+            INNER JOIN Production.Product p ON sod.ProductID = p.ProductID
+            LEFT JOIN Production.ProductSubcategory psc ON p.ProductSubcategoryID = psc.ProductSubcategoryID
+            LEFT JOIN Production.ProductCategory pc ON psc.ProductCategoryID = pc.ProductCategoryID
+            WHERE {where_sql};
+            """,
+            params,
+        )
+        row = _scale_money(
+            _dictfetchall(cursor)[0],
+            ["total_sales_amount", "gross_revenue_before_discount", "discount_erosion", "gross_profit"],
+            mult,
+        )
+    if not row.get("total_orders"):
+        return None
+    net = row["total_sales_amount"]
+    row["gross_margin_pct"] = round((row["gross_profit"] / net) * 100, 2) if net else 0.0
+    row["avg_order_value"] = round(net / row["total_orders"], 2) if row["total_orders"] else 0.0
+    row["year"] = prior
+    row["like_for_like"] = like_for_like
+    row["months"] = months
+    row["comparison_label"] = (
+        f"vs {MONTH_LABELS[months[0] - 1]}–{MONTH_LABELS[months[-1] - 1]} {prior}" if like_for_like else f"vs {prior}"
+    )
+    return row
+
+
+def get_yearly_overview(category_id=None):
+    """Executive year-by-year snapshot: revenue, gross profit, orders, customers, margin."""
+    currency = get_currency_config()
+    mult = currency["currency_multiplier"]
+    where_sql, params = _build_where_clause(None, category_id)
+    with connections["adventureworks"].cursor() as cursor:
+        cursor.execute(
+            f"""
+            SELECT
+                YEAR(soh.OrderDate) AS year,
+                COUNT(DISTINCT soh.SalesOrderID) AS total_orders,
+                COUNT(DISTINCT soh.CustomerID) AS customers,
+                COUNT(DISTINCT MONTH(soh.OrderDate)) AS active_months,
+                SUM(sod.LineTotal) AS net_revenue,
+                SUM(sod.LineTotal - (p.StandardCost * sod.OrderQty)) AS gross_profit
+            FROM Sales.SalesOrderDetail sod
+            INNER JOIN Sales.SalesOrderHeader soh ON sod.SalesOrderID = soh.SalesOrderID
+            INNER JOIN Production.Product p ON sod.ProductID = p.ProductID
+            LEFT JOIN Production.ProductSubcategory psc ON p.ProductSubcategoryID = psc.ProductSubcategoryID
+            LEFT JOIN Production.ProductCategory pc ON psc.ProductCategoryID = pc.ProductCategoryID
+            WHERE {where_sql}
+            GROUP BY YEAR(soh.OrderDate)
+            ORDER BY year ASC;
+            """,
+            params,
+        )
+        rows = _scale_money(_dictfetchall(cursor), ["net_revenue", "gross_profit"], mult)
+        lfl = _like_for_like(_monthly_values(cursor, where_sql, params, "SUM(sod.LineTotal)"))
+    prev = None
+    for r in rows:
+        info = lfl.get(int(r["year"]), {})
+        r["revenue_lfl_pct"] = info.get("lfl_pct")
+        r["lfl_label"] = info.get("lfl_label")
+        net = float(r["net_revenue"] or 0)
+        r["margin_pct"] = round((float(r["gross_profit"] or 0) / net) * 100, 2) if net else 0.0
+        r["revenue_growth_pct"] = _pct_change(net, float(prev["net_revenue"] or 0)) if prev else None
+        r["partial_year"] = int(r["active_months"] or 0) < 12
+        prev = r
+    return rows

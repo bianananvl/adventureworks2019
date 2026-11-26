@@ -40,15 +40,22 @@
                 <h4 class="fw-bold mb-1" style="color: var(--icy-blue);">JBABE<span style="color: var(--fresh-sky);">Works</span></h4>
                 <div class="small mb-4" style="color: var(--icy-blue); opacity: 0.8;">SQL Server: AdventureWorks2019</div>
 
+                <div class="sidebar-section-label">Analytics</div>
                 <ul class="nav nav-pills flex-column gap-1" id="sidebar-nav">
                     <li class="nav-item" id="nav-exec"><a href="/executive_central.html" target="content-frame" class="nav-link active text-white">Executive Central</a></li>
                     <li class="nav-item" id="nav-sales"><a href="/sales_analysis.html" target="content-frame" class="nav-link text-white">Sales Analysis</a></li>
                     <li class="nav-item" id="nav-customers"><a href="/customer_profile.html" target="content-frame" class="nav-link text-white">Customer Profile</a></li>
                     <li class="nav-item" id="nav-revloss"><a href="/revenue_loss.html" target="content-frame" class="nav-link text-white">Revenue &amp; Loss</a></li>
                     <li class="nav-item" id="nav-cost"><a href="/cost_analysis.html" target="content-frame" class="nav-link text-white">Cost Analysis</a></li>
-                    <li class="nav-item" id="nav-rbac"><a href="/rbac.html" target="content-frame" class="nav-link text-white">RBAC Policy</a></li>
-                    <li class="nav-item" id="nav-audit"><a href="/audit_logs.html" target="content-frame" class="nav-link text-white">Audit Logs</a></li>
                 </ul>
+
+                <div id="sidebar-admin-group">
+                    <div class="sidebar-section-label mt-3">Administration</div>
+                    <ul class="nav nav-pills flex-column gap-1" id="sidebar-admin">
+                        <li class="nav-item" id="nav-rbac"><a href="/rbac.html" target="content-frame" class="nav-link text-white">User Management &amp; RBAC</a></li>
+                        <li class="nav-item" id="nav-audit"><a href="/audit_logs.html" target="content-frame" class="nav-link text-white">Audit Logs</a></li>
+                    </ul>
+                </div>
 
                 <hr class="my-3" style="border-color: rgba(174, 213, 245, 0.25);">
 
@@ -77,9 +84,9 @@
         const appShell = document.getElementById('app-shell');
         const frame = document.getElementById('content-frame');
 
-        document.querySelectorAll('#sidebar-nav a, #sidebar-system a').forEach(link => {
+        document.querySelectorAll('#sidebar-nav a, #sidebar-admin a, #sidebar-system a').forEach(link => {
             link.addEventListener('click', function() {
-                document.querySelectorAll('#sidebar-nav a, #sidebar-system a').forEach(l => l.classList.remove('active'));
+                document.querySelectorAll('#sidebar-nav a, #sidebar-admin a, #sidebar-system a').forEach(l => l.classList.remove('active'));
                 this.classList.add('active');
             });
         });
@@ -108,6 +115,9 @@
                 document.getElementById('nav-rbac')?.classList.add('d-none');
             }
 
+            const adminVisible = ['nav-rbac', 'nav-audit'].some(id => !document.getElementById(id)?.classList.contains('d-none'));
+            document.getElementById('sidebar-admin-group')?.classList.toggle('d-none', !adminVisible);
+
             if (p.can_view_sales === false) document.getElementById('nav-sales')?.classList.add('d-none');
             if (p.can_view_customers === false) document.getElementById('nav-customers')?.classList.add('d-none');
             if (p.can_view_revenue_loss === false) document.getElementById('nav-revloss')?.classList.add('d-none');
@@ -122,7 +132,7 @@
                 else defaultPage = '/profile.html';
             }
 
-            document.querySelectorAll('#sidebar-nav a, #sidebar-system a').forEach(a => {
+            document.querySelectorAll('#sidebar-nav a, #sidebar-admin a, #sidebar-system a').forEach(a => {
                 a.classList.toggle('active', a.getAttribute('href') === defaultPage);
             });
 

@@ -20,14 +20,8 @@
             <div class="col-auto"><select class="form-select form-select-sm" id="global-year"></select></div>
             <div class="col-auto"><label class="fw-bold">Product Category:</label></div>
             <div class="col-auto"><select class="form-select form-select-sm" id="global-category"></select></div>
-            <div class="col-auto ms-auto"><label class="fw-bold">Currency:</label></div>
-            <div class="col-auto">
-                <select class="form-select form-select-sm" id="global-currency">
-                    <option value="USD">USD ($)</option>
-                    <option value="PHP">PHP (₱)</option>
-                    <option value="EUR">EUR (€)</option>
-                    <option value="JPY">JPY (¥)</option>
-                </select>
+            <div class="col-auto ms-auto">
+                <span class="badge bg-light text-dark border" id="active-currency-badge" title="Currency is set by the Administrator in Settings">Currency: USD ($)</span>
             </div>
         </div>
     </div>
@@ -37,10 +31,10 @@
         <p class="text-muted mb-4">Direct StandardCost COGS, outbound freight/tax, and vendor procurement spend from <code>Purchasing.PurchaseOrderHeader</code>.</p>
 
         <div class="row g-3 mb-4">
-            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm"><small class="text-muted">Total Standard COGS</small><h3 class="fw-bold my-1 money-val" id="cost-standard-cogs" data-usd="0">—</h3></div></div>
-            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm"><small class="text-muted">Outbound Freight Cost</small><h3 class="fw-bold my-1 money-val" id="cost-outbound-freight" data-usd="0">—</h3></div></div>
-            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm"><small class="text-muted">Sales Tax Amount</small><h3 class="fw-bold my-1 money-val" id="cost-tax-amount" data-usd="0">—</h3></div></div>
-            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm"><small class="text-muted">Vendor Procurement Spend</small><h3 class="fw-bold my-1 money-val" id="cost-procurement-spend" data-usd="0">—</h3><small class="text-muted" id="cost-po-count">—</small></div></div>
+            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm kpi-card"><small class="text-muted">Total Standard COGS</small><h3 class="fw-bold my-1 money-val" id="cost-standard-cogs" data-usd="0">—</h3></div></div>
+            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm kpi-card"><small class="text-muted">Outbound Freight Cost</small><h3 class="fw-bold my-1 money-val" id="cost-outbound-freight" data-usd="0">—</h3></div></div>
+            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm kpi-card"><small class="text-muted">Sales Tax Amount</small><h3 class="fw-bold my-1 money-val" id="cost-tax-amount" data-usd="0">—</h3></div></div>
+            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm kpi-card"><small class="text-muted">Vendor Procurement Spend</small><h3 class="fw-bold my-1 money-val" id="cost-procurement-spend" data-usd="0">—</h3><small class="text-muted" id="cost-po-count">—</small></div></div>
         </div>
 
         <div class="row g-3 mb-4">

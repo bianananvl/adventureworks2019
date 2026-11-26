@@ -26,14 +26,8 @@
                     <option value="Individual">B2C Individual</option>
                 </select>
             </div>
-            <div class="col-auto ms-auto"><label class="fw-bold">Currency:</label></div>
-            <div class="col-auto">
-                <select class="form-select form-select-sm" id="global-currency">
-                    <option value="USD">USD ($)</option>
-                    <option value="PHP">PHP (₱)</option>
-                    <option value="EUR">EUR (€)</option>
-                    <option value="JPY">JPY (¥)</option>
-                </select>
+            <div class="col-auto ms-auto">
+                <span class="badge bg-light text-dark border" id="active-currency-badge" title="Currency is set by the Administrator in Settings">Currency: USD ($)</span>
             </div>
         </div>
     </div>
@@ -77,15 +71,22 @@
                 <div>
                     <h5 class="fw-bold mb-1 text-teal">Top 15 High-Value Customers</h5>
                     <p class="text-muted small mb-0">Click any customer row to inspect live account metrics.</p>
+                    <div class="d-flex flex-wrap gap-1 mt-2 small label-legend">
+                        <span class="text-muted me-1">Labels:</span>
+                        <span class="cust-label label-platinum">Platinum</span><span class="cust-label label-gold">Gold</span><span class="cust-label label-silver">Silver</span>
+                        <span class="text-muted mx-1">value tier ·</span>
+                        <span class="cust-label label-vip">VIP</span><span class="cust-label label-loyal">Loyal</span><span class="cust-label label-repeat">Repeat</span><span class="cust-label label-onetime">One-Time</span>
+                        <span class="text-muted ms-1">loyalty by order count</span>
+                    </div>
                 </div>
                 <div style="min-width: 260px;">
-                    <input type="search" class="form-control form-control-sm" id="cust-search" placeholder="Search customer or account #...">
+                    <input type="search" class="form-control form-control-sm" id="cust-search" placeholder="Search customer, account # or label...">
                 </div>
             </div>
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0" id="vip-table">
                     <thead class="table-light">
-                        <tr><th>#</th><th>Customer / Store Name</th><th>Account #</th><th>Segment</th><th>Orders</th><th>Total Spend</th><th>Avg Order</th><th>Last Order</th></tr>
+                        <tr><th>#</th><th>Customer / Store Name</th><th>Account #</th><th>Segment</th><th>Labels</th><th class="text-end">Orders</th><th class="text-end">Total Spend</th><th class="text-end">Avg Order</th><th>Last Order</th></tr>
                     </thead>
                     <tbody id="vip-tbody"></tbody>
                 </table>

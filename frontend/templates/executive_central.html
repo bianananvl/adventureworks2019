@@ -25,14 +25,8 @@
             <div class="col-auto">
                 <select class="form-select form-select-sm" id="global-category"><option value="">Loading categories...</option></select>
             </div>
-            <div class="col-auto ms-auto"><label class="fw-bold">Currency:</label></div>
-            <div class="col-auto">
-                <select class="form-select form-select-sm" id="global-currency">
-                    <option value="USD">USD ($)</option>
-                    <option value="PHP">PHP (₱)</option>
-                    <option value="EUR">EUR (€)</option>
-                    <option value="JPY">JPY (¥)</option>
-                </select>
+            <div class="col-auto ms-auto">
+                <span class="badge bg-light text-dark border" id="active-currency-badge" title="Currency is set by the Administrator in Settings">Currency: USD ($)</span>
             </div>
         </div>
     </div>
@@ -46,28 +40,32 @@
                 <div class="card p-3 border-0 shadow-sm kpi-card">
                     <small class="text-muted">Total Product Sales</small>
                     <h3 class="fw-bold my-1 money-val" id="kpi-total-sales" data-usd="0">—</h3>
-                    <small class="text-success" id="kpi-total-orders">Loading orders...</small>
+                    <small class="text-muted d-block" id="kpi-total-orders">Loading orders...</small>
+                    <div class="mt-1" id="kpi-sales-delta"></div>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="card p-3 border-0 shadow-sm kpi-card">
                     <small class="text-muted">Ordering Customers</small>
                     <h3 class="fw-bold my-1" id="kpi-active-customers">—</h3>
-                    <small class="text-muted">B2B Stores &amp; B2C Individuals</small>
+                    <small class="text-muted d-block">B2B Stores &amp; B2C Individuals</small>
+                    <div class="mt-1" id="kpi-cust-delta"></div>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="card p-3 border-0 shadow-sm kpi-card">
                     <small class="text-muted">Gross Margin %</small>
                     <h3 class="fw-bold my-1" id="kpi-gross-margin">—</h3>
-                    <small class="text-muted">Net Revenue vs. StandardCost</small>
+                    <small class="text-muted d-block">Net Revenue vs. StandardCost</small>
+                    <div class="mt-1" id="kpi-margin-delta"></div>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="card p-3 border-0 shadow-sm kpi-card">
                     <small class="text-muted">Average Order Value</small>
                     <h3 class="fw-bold my-1 money-val" id="kpi-avg-order" data-usd="0">—</h3>
-                    <small class="text-muted">Per SalesOrderID</small>
+                    <small class="text-muted d-block">Per SalesOrderID</small>
+                    <div class="mt-1" id="kpi-aov-delta"></div>
                 </div>
             </div>
         </div>
@@ -96,6 +94,38 @@
                         </select>
                     </div>
                     <div style="height: 260px;"><canvas id="execCategoryChart"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Year-over-Year Performance + Auto Insights -->
+        <div class="row g-3 mb-4">
+            <div class="col-lg-8">
+                <div class="card p-3 border-0 shadow-sm h-100">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <h5 class="fw-bold m-0">Year-over-Year Performance</h5>
+                            <small class="text-muted">Net revenue and gross profit per year, gross margin % on the right axis.</small>
+                        </div>
+                    </div>
+                    <div style="height: 260px;"><canvas id="execYearlyChart"></canvas></div>
+                    <div class="table-responsive mt-3">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr><th>Year</th><th class="text-end">Net Revenue</th><th class="text-end">YoY Growth</th><th class="text-end">Gross Profit</th><th class="text-end">Margin</th><th class="text-end">Orders</th><th class="text-end">Customers</th></tr>
+                            </thead>
+                            <tbody id="exec-yearly-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card p-3 border-0 shadow-sm h-100">
+                    <h5 class="fw-bold mb-1">Key Insights</h5>
+                    <small class="text-muted mb-3">Generated automatically from the current filters.</small>
+                    <ul class="insight-list list-unstyled mb-0" id="exec-insights">
+                        <li class="text-muted small">Analysing data…</li>
+                    </ul>
                 </div>
             </div>
         </div>

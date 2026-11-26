@@ -109,6 +109,10 @@ class SystemSettings(models.Model):
         default=Decimal("1.0000"),
         help_text="Multiplier applied to base USD figures from AdventureWorks (e.g., 58.5000 for PHP).",
     )
+    default_users_seeded = models.BooleanField(
+        default=False,
+        help_text="Set once the demo role accounts have been created, so deleted users are not re-created.",
+    )
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -148,6 +152,12 @@ class AuditLog(models.Model):
     action = models.CharField(max_length=100)
     module = models.CharField(max_length=100, blank=True)
     details = models.TextField(blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    status = models.CharField(
+        max_length=10,
+        default="SUCCESS",
+        help_text="SUCCESS, FAILED or DENIED.",
+    )
 
     class Meta:
         ordering = ["-timestamp"]

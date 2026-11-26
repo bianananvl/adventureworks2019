@@ -20,38 +20,83 @@
             <div class="col-auto"><select class="form-select form-select-sm" id="global-year"></select></div>
             <div class="col-auto"><label class="fw-bold">Product Category:</label></div>
             <div class="col-auto"><select class="form-select form-select-sm" id="global-category"></select></div>
-            <div class="col-auto ms-auto"><label class="fw-bold">Currency:</label></div>
-            <div class="col-auto">
-                <select class="form-select form-select-sm" id="global-currency">
-                    <option value="USD">USD ($)</option>
-                    <option value="PHP">PHP (₱)</option>
-                    <option value="EUR">EUR (€)</option>
-                    <option value="JPY">JPY (¥)</option>
-                </select>
+            <div class="col-auto ms-auto">
+                <span class="badge bg-light text-dark border" id="active-currency-badge" title="Currency is set by the Administrator in Settings">Currency: USD ($)</span>
             </div>
         </div>
     </div>
 
     <div class="container-fluid p-0">
         <h2 class="fw-bold mb-1">Revenue &amp; Loss Analysis</h2>
-        <p class="text-muted mb-4">Gross revenue vs. discount concessions, COGS, gross profit, and negative-margin line items.</p>
+        <p class="text-muted mb-4">Comparative view of gross revenue, discount concessions, COGS and gross profit by year, quarter and month, plus negative-margin line items.</p>
 
         <div class="row g-3 mb-4">
-            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm"><small class="text-muted">Gross Revenue (Pre-Discount)</small><h3 class="fw-bold my-1 money-val" id="rev-gross-before" data-usd="0">—</h3></div></div>
-            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm"><small class="text-muted">Discount Erosion</small><h3 class="fw-bold my-1 text-danger money-val" id="rev-discount-erosion" data-usd="0">—</h3><small class="text-warning" id="rev-leakage-rate">0.00%</small></div></div>
-            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm"><small class="text-muted">Net Product Revenue</small><h3 class="fw-bold my-1 money-val" id="rev-net-product" data-usd="0">—</h3></div></div>
-            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm"><small class="text-muted">Gross Profit</small><h3 class="fw-bold my-1 text-success money-val" id="rev-gross-profit" data-usd="0">—</h3><small class="text-muted" id="rev-gross-margin">—</small></div></div>
+            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm kpi-card"><small class="text-muted">Gross Revenue (Pre-Discount)</small><h3 class="fw-bold my-1 money-val" id="rev-gross-before">—</h3><div id="rev-gross-delta"></div></div></div>
+            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm kpi-card"><small class="text-muted">Discount Erosion</small><h3 class="fw-bold my-1 text-danger money-val" id="rev-discount-erosion">—</h3><small class="text-muted d-block" id="rev-leakage-rate">0.0%</small><div id="rev-discount-delta"></div></div></div>
+            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm kpi-card"><small class="text-muted">Net Product Revenue</small><h3 class="fw-bold my-1 money-val" id="rev-net-product">—</h3><div id="rev-net-delta"></div></div></div>
+            <div class="col-md-3"><div class="card p-3 border-0 shadow-sm kpi-card"><small class="text-muted">Gross Profit</small><h3 class="fw-bold my-1 text-success money-val" id="rev-gross-profit">—</h3><small class="text-muted d-block" id="rev-gross-margin">—</small><div id="rev-profit-delta"></div></div></div>
         </div>
 
+        <!-- COMPARATIVE REVENUE & PROFIT BY PERIOD -->
         <div class="card p-3 border-0 shadow-sm mb-4">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <h5 class="fw-bold m-0">Net Revenue, Estimated COGS &amp; Gross Profit Over Time</h5>
-                <select class="form-select form-select-sm w-auto chart-type-switcher" data-target="revProfitTrendChart">
-                    <option value="line">Line</option>
-                    <option value="bar">Bar</option>
-                </select>
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+                <div>
+                    <h5 class="fw-bold m-0">Comparative Revenue, COGS &amp; Gross Profit</h5>
+                    <small class="text-muted" id="rev-cmp-subtitle">Compare periods side by side.</small>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <select class="form-select form-select-sm w-auto" id="rev-granularity" aria-label="Aggregate by">
+                        <option value="year" selected>By Year</option>
+                        <option value="quarter">By Quarter</option>
+                        <option value="month">By Month</option>
+                    </select>
+                    <select class="form-select form-select-sm w-auto chart-type-switcher" data-target="revCompareChart">
+                        <option value="bar">Bar</option>
+                        <option value="line">Line</option>
+                    </select>
+                </div>
             </div>
-            <div style="height: 260px;"><canvas id="revProfitTrendChart"></canvas></div>
+            <div style="height: 300px;"><canvas id="revCompareChart"></canvas></div>
+            <h6 class="fw-bold mt-3 mb-2">Period-over-Period Comparison</h6>
+            <div class="table-responsive" style="max-height: 360px;">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light sticky-top" id="rev-period-head"></thead>
+                    <tbody id="rev-period-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-lg-6 d-none" id="rev-yoy-card">
+                <div class="card p-3 border-0 shadow-sm h-100">
+                    <h5 class="fw-bold m-0">Net Revenue: Same Period, Year-over-Year</h5>
+                    <small class="text-muted mb-2">Each line is one year (switch to By Quarter / By Month above).</small>
+                    <div style="height: 260px;"><canvas id="revYoyChart"></canvas></div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="card p-3 border-0 shadow-sm h-100">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                        <div>
+                            <h5 class="fw-bold m-0">Category Profitability by Year</h5>
+                            <small class="text-muted">Compare each product category across years.</small>
+                        </div>
+                        <select class="form-select form-select-sm w-auto" id="rev-cat-metric">
+                            <option value="gross_profit">Gross Profit</option>
+                            <option value="net_revenue">Net Revenue</option>
+                            <option value="margin_pct">Gross Margin %</option>
+                        </select>
+                    </div>
+                    <div style="height: 260px;"><canvas id="revCategoryYearChart"></canvas></div>
+                    <div class="table-responsive mt-3">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light" id="rev-cat-year-head"></thead>
+                            <tbody id="rev-cat-year-tbody"></tbody>
+                        </table>
+                    </div>
+                    <small class="text-muted mt-2" id="rev-cat-year-note"></small>
+                </div>
+            </div>
         </div>
 
         <div class="alert alert-warning border-0 shadow-sm mb-4">
@@ -63,7 +108,7 @@
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
-                        <tr><th>Product Name</th><th>Category</th><th>Units Sold</th><th>Net Revenue</th><th>Standard COGS</th><th>Net Margin Variance</th></tr>
+                        <tr><th>Product Name</th><th>Category</th><th class="text-end">Units Sold</th><th class="text-end">Net Revenue</th><th class="text-end">Standard COGS</th><th class="text-end">Net Margin Variance</th></tr>
                     </thead>
                     <tbody id="negative-margin-tbody"></tbody>
                 </table>

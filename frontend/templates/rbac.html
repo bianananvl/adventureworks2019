@@ -4,9 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RBAC Policy | AdventureWorks2019</title>
+    <title>User Management &amp; RBAC | AdventureWorks2019</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
     <script src="{% static 'js/rbac.js' %}"></script>
 </head>
@@ -14,105 +15,126 @@
     <div id="api-error-banner" class="alert alert-danger d-none"></div>
 
     <div class="container-fluid p-0">
-        <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
             <div>
-                <h2 class="fw-bold mb-1">Role-Based Access Control (RBAC)</h2>
-                <p class="text-muted mb-0">Enterprise 7-role permission matrix and live Django user assignments.</p>
+                <h2 class="fw-bold mb-1">User Management &amp; RBAC</h2>
+                <p class="text-muted mb-0">Create accounts, assign roles, activate or deactivate access, and reset passwords. Every change is written to the Audit Logs.</p>
             </div>
-            <span class="badge bg-primary px-3 py-2">Administrator Governance</span>
+            <button type="button" class="btn btn-primary fw-semibold" id="btn-add-user">+ Add User</button>
         </div>
 
-        <!-- 1. LIVE REGISTERED USERS & ROLES (/api/rbac/) -->
+        <div id="rbac-feedback" class="alert d-none py-2 small mb-3"></div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-md-3"><div class="card p-3 border-0 shadow-sm stat-card"><small class="text-muted">Total Users</small><h3 class="fw-bold my-1" id="rbac-stat-total">—</h3></div></div>
+            <div class="col-6 col-md-3"><div class="card p-3 border-0 shadow-sm stat-card"><small class="text-muted">Active</small><h3 class="fw-bold my-1 text-success" id="rbac-stat-active">—</h3></div></div>
+            <div class="col-6 col-md-3"><div class="card p-3 border-0 shadow-sm stat-card"><small class="text-muted">Inactive</small><h3 class="fw-bold my-1 text-secondary" id="rbac-stat-inactive">—</h3></div></div>
+            <div class="col-6 col-md-3"><div class="card p-3 border-0 shadow-sm stat-card"><small class="text-muted">Administrators</small><h3 class="fw-bold my-1 text-accent" id="rbac-stat-admins">—</h3></div></div>
+        </div>
+
+        <!-- 1. USER ACCOUNTS -->
         <div class="card p-3 border-0 shadow-sm mb-4">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5 class="fw-bold mb-0 text-teal">Registered Application Accounts</h5>
-                <a href="/admin/auth/user/" target="_blank" class="btn btn-sm btn-outline-primary">Manage Users in Django Admin</a>
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                <h5 class="fw-bold mb-0 text-teal">User Accounts</h5>
+                <div class="d-flex flex-wrap gap-2">
+                    <input type="search" class="form-control form-control-sm" style="min-width: 220px;" id="user-search" placeholder="Search name, username, email...">
+                    <select class="form-select form-select-sm w-auto" id="user-role-filter"><option value="">All Roles</option></select>
+                    <select class="form-select form-select-sm w-auto" id="user-status-filter">
+                        <option value="">All Statuses</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
             </div>
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
-                        <tr>
-                            <th>ID</th>
-                            <th>Username</th>
-                            <th>Assigned Role Key</th>
-                            <th>Role Display Title</th>
-                            <th>Status</th>
-                        </tr>
+                        <tr><th>User</th><th>Role</th><th>Status</th><th>Last Login</th><th>Joined</th><th class="text-end">Actions</th></tr>
                     </thead>
-                    <tbody id="rbac-users-tbody"></tbody>
+                    <tbody id="rbac-users-tbody"><tr><td colspan="6" class="text-center text-muted py-3">Loading users…</td></tr></tbody>
                 </table>
             </div>
         </div>
 
-        <!-- 2. DEPARTMENTAL DATA SILO AUTHORIZATION POLICY -->
+        <!-- 2. ROLE PERMISSION MATRIX (generated from backend ROLE_PERMISSIONS) -->
         <div class="card p-3 border-0 shadow-sm">
-            <div class="mb-3">
-                <h5 class="fw-bold mb-1 text-teal">Departmental Data Silo Authorization Policy</h5>
-            </div>
+            <h5 class="fw-bold mb-1 text-teal">Role Permission Matrix</h5>
+            <p class="text-muted small mb-3">Live from the backend policy. Assigning a role to a user grants exactly these permissions.</p>
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Application User Role</th>
-                            <th>View Dashboard &amp; Reports</th>
-                            <th>Export Reports &amp; Graphs</th>
-                            <th>Manage User Notes / Tags</th>
-                            <th>Configure App Settings &amp; RBAC</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td class="fw-bold">Administrator<br><small class="text-muted fw-normal">IT Governance &amp; Security</small></td>
-                            <td><span class="badge bg-success">ALLOWED (All Modules)</span></td>
-                            <td><span class="badge bg-success">ALLOWED</span></td>
-                            <td><span class="badge bg-primary">Create / Edit / Delete</span></td>
-                            <td><span class="badge bg-success">AUTHORIZED</span></td>
-                        </tr>
-                        <tr>
-                            <td class="fw-bold">Executive Management<br><small class="text-muted fw-normal">Manager</small></td>
-                            <td><span class="badge bg-success">ALLOWED (All Modules)</span></td>
-                            <td><span class="badge bg-success">ALLOWED</span></td>
-                            <td><span class="badge bg-info text-dark">Create / Edit</span></td>
-                            <td><span class="badge bg-danger">DENIED (Read-Only)</span></td>
-                        </tr>
-                        <tr>
-                            <td class="fw-bold">Department Operations Supervisor<br><small class="text-muted fw-normal">Supervisor</small></td>
-                            <td><span class="badge bg-success">ALLOWED (Sales &amp; Customers)</span></td>
-                            <td><span class="badge bg-success">ALLOWED (Team Scope)</span></td>
-                            <td><span class="badge bg-info text-dark">Create Own</span></td>
-                            <td><span class="badge bg-danger">DENIED</span></td>
-                        </tr>
-                        <tr>
-                            <td class="fw-bold">Sales Department<br><small class="text-muted fw-normal">Sales Rep / Analyst</small></td>
-                            <td><span class="badge bg-success">ALLOWED (Sales Only)</span></td>
-                            <td><span class="badge bg-success">ALLOWED (Graph PNG)</span></td>
-                            <td><span class="badge bg-secondary">View Only</span></td>
-                            <td><span class="badge bg-danger">DENIED</span></td>
-                        </tr>
-                        <tr>
-                            <td class="fw-bold">Marketing &amp; Customer Relations<br><small class="text-muted fw-normal">Customer Analyst</small></td>
-                            <td><span class="badge bg-success">ALLOWED (Customers Only)</span></td>
-                            <td><span class="badge bg-success">ALLOWED (Graph PNG)</span></td>
-                            <td><span class="badge bg-secondary">View Only</span></td>
-                            <td><span class="badge bg-danger">DENIED</span></td>
-                        </tr>
-                        <tr>
-                            <td class="fw-bold">Financial &amp; Pricing Analyst<br><small class="text-muted fw-normal">Financial Analyst</small></td>
-                            <td><span class="badge bg-success">ALLOWED (Revenue &amp; Loss)</span></td>
-                            <td><span class="badge bg-success">ALLOWED (Graph PNG)</span></td>
-                            <td><span class="badge bg-secondary">View Only</span></td>
-                            <td><span class="badge bg-danger">DENIED</span></td>
-                        </tr>
-                        <tr>
-                            <td class="fw-bold">Manufacturing Cost Analyst<br><small class="text-muted fw-normal">Cost / Inventory Analyst</small></td>
-                            <td><span class="badge bg-success">ALLOWED (Cost Analysis)</span></td>
-                            <td><span class="badge bg-success">ALLOWED (Graph PNG)</span></td>
-                            <td><span class="badge bg-secondary">View Only</span></td>
-                            <td><span class="badge bg-danger">DENIED</span></td>
-                        </tr>
-                    </tbody>
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light" id="rbac-matrix-head"></thead>
+                    <tbody id="rbac-matrix-tbody"></tbody>
                 </table>
             </div>
+        </div>
+    </div>
+
+    <!-- ADD / EDIT USER MODAL -->
+    <div class="modal fade" id="userModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form class="modal-content" id="user-form" autocomplete="off">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="user-modal-title">Add New User</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-danger py-2 small d-none" id="um-error"></div>
+                    <input type="hidden" id="um-id">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold" for="um-username">Username</label>
+                        <input type="text" class="form-control form-control-sm" id="um-username" maxlength="150" required>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col"><label class="form-label small fw-bold" for="um-first">First Name</label><input type="text" class="form-control form-control-sm" id="um-first" maxlength="150"></div>
+                        <div class="col"><label class="form-label small fw-bold" for="um-last">Last Name</label><input type="text" class="form-control form-control-sm" id="um-last" maxlength="150"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold" for="um-email">Email</label>
+                        <input type="email" class="form-control form-control-sm" id="um-email" maxlength="254">
+                    </div>
+                    <div class="mb-3" id="um-password-group">
+                        <label class="form-label small fw-bold" for="um-password">Initial Password</label>
+                        <input type="password" class="form-control form-control-sm" id="um-password" minlength="8" autocomplete="new-password">
+                        <small class="text-muted">At least 8 characters and not similar to the username.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold" for="um-role">Role</label>
+                        <select class="form-select form-select-sm" id="um-role"></select>
+                        <div class="mt-2" id="um-role-preview"></div>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="um-active" checked>
+                        <label class="form-check-label small" for="um-active">Account is active (can sign in)</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-primary fw-semibold">Save User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- RESET PASSWORD MODAL -->
+    <div class="modal fade" id="passwordModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <form class="modal-content" id="password-form" autocomplete="off">
+                <div class="modal-header">
+                    <h5 class="modal-title">Reset Password</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small mb-3">New password for <strong id="pw-username"></strong></p>
+                    <div class="alert alert-danger py-2 small d-none" id="pw-error"></div>
+                    <input type="hidden" id="pw-user-id">
+                    <input type="password" class="form-control form-control-sm mb-2" id="pw-new" placeholder="New password" minlength="8" required autocomplete="new-password">
+                    <input type="password" class="form-control form-control-sm" id="pw-confirm" placeholder="Confirm password" minlength="8" required autocomplete="new-password">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-primary fw-semibold">Reset</button>
+                </div>
+            </form>
         </div>
     </div>
 
