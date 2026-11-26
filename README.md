@@ -63,7 +63,7 @@ A full-stack Business Intelligence (BI) web portal built with **Django**, **Micr
 ### 3. Configure Your SQL Server Host Name
 
 1. In the left file sidebar of PyCharm or VS Code, expand `backend` > expand `config` > click `settings.py`.
-2. Find the `AW_DB_HOST` line inside `DATABASES` and replace the default host string with your own Windows Server Name from Step 1 *(leave `USER` and `PASSWORD` blank so Django uses Windows Authentication)*:
+2. Find the `AW_DB_HOST` line inside `DATABASES` and replace the default host string "YOUR-WINDOWS-SERVER-NAME" with your own Windows Server Name from Step 1 *(leave `USER` and `PASSWORD` blank so Django uses Windows Authentication)*:
    ```python
    "HOST": os.environ.get("AW_DB_HOST", "YOUR-WINDOWS-SERVER-NAME"),
    ```
