@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', async () => {
     const chartInstances = {};
     const chartDataCache = {};
+    const registeredCharts = {};
 
     // 1. Saved Preferences & Theme
     const savedTheme = localStorage.getItem('aw_theme') || 'light';
@@ -138,11 +139,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // Build & Enforce RBAC Export Controls (CSV & PDF) on Reporting Modules
+    // Build & Enforce Top Export Toolbar (Export CSV, Export PDF, and Single Export PNG Checkbox Dropdown)
     const exportEligiblePages = ['executive', 'sales', 'customers', 'revenue_loss', 'cost'];
     const isBulkExportAllowed = ['ADMINISTRATOR', 'MANAGER', 'SUPERVISOR'].includes(sessionRole);
 
-    if (exportEligiblePages.includes(currentPageKey) && isBulkExportAllowed) {
+    if (exportEligiblePages.includes(currentPageKey)) {
         const pageHeader = document.querySelector('.container-fluid h2, .container-fluid h3');
         if (pageHeader && !document.getElementById('rbac-export-toolbar')) {
             const headerRow = document.createElement('div');
@@ -152,110 +153,125 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const toolbar = document.createElement('div');
             toolbar.id = 'rbac-export-toolbar';
-            toolbar.className = 'd-flex gap-2';
-            toolbar.innerHTML = `
+            toolbar.className = 'd-flex flex-wrap align-items-center gap-2';
+
+            const bulkButtonsHtml = isBulkExportAllowed ? `
                 <button type="button" id="btn-export-csv" class="btn btn-sm btn-outline-primary fw-semibold px-3">
                     Export CSV
                 </button>
                 <button type="button" id="btn-export-pdf" class="btn btn-sm btn-primary fw-semibold px-3">
                     Export PDF
                 </button>
+            ` : '';
+
+            toolbar.innerHTML = `
+                ${bulkButtonsHtml}
+                <div class="dropdown" id="png-export-dropdown">
+                    <button class="btn btn-sm btn-outline-secondary fw-semibold px-3 dropdown-toggle" type="button" id="btn-export-png-menu" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                        Export PNG
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end p-3 shadow" style="min-width: 270px;" id="png-export-checklist">
+                        <div class="text-muted small">Loading graphs...</div>
+                    </div>
+                </div>
             `;
             headerRow.appendChild(toolbar);
 
-            document.getElementById('btn-export-csv').addEventListener('click', () => {
-                const table = document.querySelector('table');
-                if (!table) {
-                    alert('No tabular dataset available on this view to export.');
-                    return;
-                }
-                const rows = Array.from(table.querySelectorAll('tr')).filter(r => r.offsetParent !== null);
-                const csvContent = rows.map(row =>
-                    Array.from(row.querySelectorAll('th, td'))
-                        .map(cell => `"${cell.innerText.replace(/\s+/g, ' ').trim().replace(/"/g, '""')}"`)
-                        .join(',')
-                ).join('\n');
-
-                const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `JBABEWorks_${currentPageKey}_${new Date().toISOString().slice(0, 10)}.csv`;
-                link.click();
-                URL.revokeObjectURL(url);
-            });
-
-            document.getElementById('btn-export-pdf').addEventListener('click', async () => {
-                const loadScript = (src) => new Promise((resolve, reject) => {
-                    const s = document.createElement('script');
-                    s.src = src;
-                    s.onload = resolve;
-                    s.onerror = reject;
-                    document.head.appendChild(s);
-                });
-
-                if (!window.jspdf) {
-                    await loadScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
-                }
-                if (!window.jspdf.jsPDF.API.autoTable) {
-                    await loadScript('https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js');
-                }
-
-                const cleanPdfText = (str) => (str || '')
-                    .replace(/₱\s*/g, 'PHP ')
-                    .replace(/\s+/g, ' ')
-                    .trim();
-
-                const { jsPDF } = window.jspdf;
-                const doc = new jsPDF({ orientation: 'landscape' });
-
-                doc.setFillColor(27, 42, 74);
-                doc.rect(0, 0, 297, 24, 'F');
-                doc.setTextColor(255, 255, 255);
-                doc.setFontSize(15);
-                doc.text(`JBABEWorks BI Portal - ${cleanPdfText(pageHeader.innerText)}`, 14, 11);
-                doc.setFontSize(9);
-                doc.text(
-                    `Generated by: ${activeSession.user || 'User'} (${activeSession.role_display || sessionRole})  |  ${new Date().toLocaleString()}`,
-                    14,
-                    18
-                );
-
-                doc.setTextColor(30, 41, 59);
-                doc.setFontSize(10);
-                let y = 33;
-                const kpiCards = Array.from(document.querySelectorAll('.card')).slice(0, 4);
-                kpiCards.forEach(card => {
-                    const text = cleanPdfText(card.innerText);
-                    if (text && text.length < 130) {
-                        doc.text(`- ${text}`, 14, y);
-                        y += 6.5;
+            if (isBulkExportAllowed) {
+                document.getElementById('btn-export-csv').addEventListener('click', () => {
+                    const table = document.querySelector('table');
+                    if (!table) {
+                        alert('No tabular dataset available on this view to export.');
+                        return;
                     }
+                    const rows = Array.from(table.querySelectorAll('tr')).filter(r => r.offsetParent !== null);
+                    const csvContent = rows.map(row =>
+                        Array.from(row.querySelectorAll('th, td'))
+                            .map(cell => `"${cell.innerText.replace(/\s+/g, ' ').trim().replace(/"/g, '""')}"`)
+                            .join(',')
+                    ).join('\n');
+
+                    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `JBABEWorks_${currentPageKey}_${new Date().toISOString().slice(0, 10)}.csv`;
+                    link.click();
+                    URL.revokeObjectURL(url);
                 });
 
-                const table = document.querySelector('table');
-                if (table) {
-                    const headRows = Array.from(table.querySelectorAll('thead tr')).map(tr =>
-                        Array.from(tr.querySelectorAll('th')).map(th => cleanPdfText(th.innerText))
-                    );
-                    const bodyRows = Array.from(table.querySelectorAll('tbody tr'))
-                        .filter(tr => tr.offsetParent !== null)
-                        .map(tr => Array.from(tr.querySelectorAll('td')).map(td => cleanPdfText(td.innerText)));
-
-                    doc.autoTable({
-                        startY: y + 4,
-                        head: headRows.length ? headRows : undefined,
-                        body: bodyRows,
-                        theme: 'grid',
-                        headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold', fontSize: 9 },
-                        bodyStyles: { fontSize: 8.5, textColor: [30, 41, 59] },
-                        alternateRowStyles: { fillColor: [248, 250, 252] },
-                        margin: { left: 14, right: 14 }
+                document.getElementById('btn-export-pdf').addEventListener('click', async () => {
+                    const loadScript = (src) => new Promise((resolve, reject) => {
+                        const s = document.createElement('script');
+                        s.src = src;
+                        s.onload = resolve;
+                        s.onerror = reject;
+                        document.head.appendChild(s);
                     });
-                }
 
-                doc.save(`JBABEWorks_${currentPageKey}_${new Date().toISOString().slice(0, 10)}.pdf`);
-            });
+                    if (!window.jspdf) {
+                        await loadScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
+                    }
+                    if (!window.jspdf.jsPDF.API.autoTable) {
+                        await loadScript('https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js');
+                    }
+
+                    const cleanPdfText = (str) => (str || '')
+                        .replace(/₱\s*/g, 'PHP ')
+                        .replace(/\s+/g, ' ')
+                        .trim();
+
+                    const { jsPDF } = window.jspdf;
+                    const doc = new jsPDF({ orientation: 'landscape' });
+
+                    doc.setFillColor(27, 42, 74);
+                    doc.rect(0, 0, 297, 24, 'F');
+                    doc.setTextColor(255, 255, 255);
+                    doc.setFontSize(15);
+                    doc.text(`JBABEWorks BI Portal - ${cleanPdfText(pageHeader.innerText)}`, 14, 11);
+                    doc.setFontSize(9);
+                    doc.text(
+                        `Generated by: ${activeSession.user || 'User'} (${activeSession.role_display || sessionRole})  |  ${new Date().toLocaleString()}`,
+                        14,
+                        18
+                    );
+
+                    doc.setTextColor(30, 41, 59);
+                    doc.setFontSize(10);
+                    let y = 33;
+                    const kpiCards = Array.from(document.querySelectorAll('.card')).slice(0, 4);
+                    kpiCards.forEach(card => {
+                        const text = cleanPdfText(card.innerText);
+                        if (text && text.length < 130) {
+                            doc.text(`- ${text}`, 14, y);
+                            y += 6.5;
+                        }
+                    });
+
+                    const table = document.querySelector('table');
+                    if (table) {
+                        const headRows = Array.from(table.querySelectorAll('thead tr')).map(tr =>
+                            Array.from(tr.querySelectorAll('th')).map(th => cleanPdfText(th.innerText))
+                        );
+                        const bodyRows = Array.from(table.querySelectorAll('tbody tr'))
+                            .filter(tr => tr.offsetParent !== null)
+                            .map(tr => Array.from(tr.querySelectorAll('td')).map(td => cleanPdfText(td.innerText)));
+
+                        doc.autoTable({
+                            startY: y + 4,
+                            head: headRows.length ? headRows : undefined,
+                            body: bodyRows,
+                            theme: 'grid',
+                            headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+                            bodyStyles: { fontSize: 8.5, textColor: [30, 41, 59] },
+                            alternateRowStyles: { fillColor: [248, 250, 252] },
+                            margin: { left: 14, right: 14 }
+                        });
+                    }
+
+                    doc.save(`JBABEWorks_${currentPageKey}_${new Date().toISOString().slice(0, 10)}.pdf`);
+                });
+            }
         }
     }
 
@@ -333,7 +349,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         const canvas = document.getElementById(canvasId);
         if (!canvas) return;
 
-        // Paint white/theme background behind transparent canvas so PNG looks crisp
         const exportCanvas = document.createElement('canvas');
         exportCanvas.width = canvas.width;
         exportCanvas.height = canvas.height;
@@ -361,41 +376,68 @@ document.addEventListener('DOMContentLoaded', async () => {
         } catch (err) {}
     }
 
-    function attachChartExportButton(canvas, canvasId) {
-        const card = canvas.closest('.card');
-        if (!card || card.querySelector(`.btn-export-png[data-canvas="${canvasId}"]`)) return;
+    function refreshPngExportDropdown() {
+        const container = document.getElementById('png-export-checklist');
+        if (!container) return;
 
-        const heading = card.querySelector('h5');
-        const chartTitle = heading ? heading.textContent.trim() : canvasId;
-        const switcher = card.querySelector(`.chart-type-switcher[data-target="${canvasId}"]`);
-
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn btn-sm btn-outline-secondary btn-export-png ms-2';
-        btn.setAttribute('data-canvas', canvasId);
-        btn.textContent = 'Export PNG';
-        btn.addEventListener('click', () => exportSpecificChartPng(canvasId, chartTitle));
-
-        if (switcher && switcher.parentNode) {
-            const group = document.createElement('div');
-            group.className = 'd-flex align-items-center';
-            switcher.parentNode.insertBefore(group, switcher);
-            group.appendChild(switcher);
-            group.appendChild(btn);
-        } else if (heading) {
-            const row = document.createElement('div');
-            row.className = 'd-flex justify-content-between align-items-center mb-2';
-            heading.parentNode.insertBefore(row, heading);
-            row.appendChild(heading);
-            row.appendChild(btn);
+        const entries = Object.entries(registeredCharts);
+        if (entries.length === 0) {
+            container.innerHTML = '<div class="text-muted small">No graphs available on this view.</div>';
+            return;
         }
+
+        container.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center pb-2 mb-2 border-bottom">
+                <small class="fw-bold text-muted">Select Graph(s) to Export</small>
+                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="btn-png-select-all">Select All</button>
+            </div>
+            <div class="d-flex flex-column gap-1 mb-3">
+                ${entries.map(([id, title]) => `
+                    <div class="form-check">
+                        <input class="form-check-input png-chart-checkbox" type="checkbox" value="${id}" data-title="${title}" id="png-chk-${id}">
+                        <label class="form-check-label small" for="png-chk-${id}">${title}</label>
+                    </div>
+                `).join('')}
+            </div>
+            <button type="button" class="btn btn-sm btn-primary w-100 fw-semibold" id="btn-download-selected-pngs">
+                Download Selected PNG(s)
+            </button>
+        `;
+
+        document.getElementById('btn-png-select-all')?.addEventListener('click', () => {
+            const boxes = container.querySelectorAll('.png-chart-checkbox');
+            const allChecked = Array.from(boxes).every(b => b.checked);
+            boxes.forEach(b => { b.checked = !allChecked; });
+        });
+
+        document.getElementById('btn-download-selected-pngs')?.addEventListener('click', async () => {
+            const selected = Array.from(container.querySelectorAll('.png-chart-checkbox:checked'));
+            if (selected.length === 0) {
+                alert('Please check at least one graph to download.');
+                return;
+            }
+            for (let i = 0; i < selected.length; i++) {
+                const box = selected[i];
+                await exportSpecificChartPng(box.value, box.getAttribute('data-title'));
+                if (i < selected.length - 1) {
+                    await new Promise(r => setTimeout(r, 250));
+                }
+            }
+        });
+    }
+
+    function registerChartForExport(canvas, canvasId) {
+        const card = canvas.closest('.card');
+        const heading = card ? card.querySelector('h5') : null;
+        registeredCharts[canvasId] = heading ? heading.textContent.trim() : canvasId;
+        refreshPngExportDropdown();
     }
 
     function renderChart(canvasId, defaultType, labels, datasets) {
         const canvas = document.getElementById(canvasId);
         if (!canvas) return;
 
-        attachChartExportButton(canvas, canvasId);
+        registerChartForExport(canvas, canvasId);
 
         const switcher = document.querySelector(`.chart-type-switcher[data-target="${canvasId}"]`);
         const type = (switcher && switcher.value) ? switcher.value : defaultType;
